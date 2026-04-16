@@ -22,12 +22,10 @@
       },
       "package": "com.spinandwin.app"
     },
-    "plugins": [
-      "react-native-reanimated"
-    ],
+    "plugins": [],
     "scheme": "spinandwin",
     "extra": {
-      "apiUrl": "http://localhost:3000",
+      "apiUrl": "https://spinandwin-production.up.railway.app",
       "walletConnectProjectId": "062d24b26c4652720fc7513622c14c4d",
       "firebase": {
         "apiKey": "AIzaSyAV8dCzZWEftKzQ3V4CNCiRSc6ebifSMY8",
@@ -36,6 +34,9 @@
         "storageBucket": "gameplayusa2026-fbb3e.firebasestorage.app",
         "messagingSenderId": "487086671764",
         "appId": "1:487086671764:web:c8342eed12ec5eed79f181"
+      },
+      "eas": {
+        "projectId": "6dd62c3e-d788-4943-8046-2ee5229c281d"
       }
     }
   }
