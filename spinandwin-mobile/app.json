@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Spin & Win",
+    "slug": "spinandwin",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0D0D1A"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.spinandwin.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0D0D1A"
+      },
+      "package": "com.spinandwin.app"
+    },
+    "plugins": [
+      "react-native-reanimated"
+    ],
+    "scheme": "spinandwin",
+    "extra": {
+      "apiUrl": "http://localhost:3000",
+      "walletConnectProjectId": "062d24b26c4652720fc7513622c14c4d",
+      "firebase": {
+        "apiKey": "AIzaSyAV8dCzZWEftKzQ3V4CNCiRSc6ebifSMY8",
+        "authDomain": "gameplayusa2026-fbb3e.firebaseapp.com",
+        "projectId": "gameplayusa2026-fbb3e",
+        "storageBucket": "gameplayusa2026-fbb3e.firebasestorage.app",
+        "messagingSenderId": "487086671764",
+        "appId": "1:487086671764:web:c8342eed12ec5eed79f181"
+      }
+    }
+  }
+}
