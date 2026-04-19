@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator, ScrollView, Linking,
+  TextInput, Alert, ActivityIndicator, ScrollView, Linking, Clipboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,13 +20,36 @@ export function WalletScreen() {
   const [withdrawAmount,  setWithdrawAmount]   = useState('');
   const [lastTxHash,      setLastTxHash]       = useState<string | null>(null);
   const [lastTxUrl,       setLastTxUrl]        = useState<string | null>(null);
+  const [depositAddress,  setDepositAddress]   = useState<string | null>(null);
+  const [checkingDeposit, setCheckingDeposit]  = useState(false);
 
   // Track previous connection state to detect new connections
   const wasConnected = useRef(false);
 
   useEffect(() => {
     refreshBalance();
+    loadDepositAddress();
   }, []);
+
+  const loadDepositAddress = async () => {
+    const { data } = await walletApi.getDepositAddress();
+    if (data) setDepositAddress(data.address);
+  };
+
+  const handleCheckDeposit = async () => {
+    setCheckingDeposit(true);
+    const { data, error } = await walletApi.checkDeposit();
+    setCheckingDeposit(false);
+    if (error) { Alert.alert('Error', error); return; }
+    if (data) {
+      if (data.credited > 0) {
+        updateUser({ balanceUsd: data.newBalance });
+        Alert.alert('Deposit Detected!', `$${data.credited.toFixed(2)} credited to your account.`);
+      } else {
+        Alert.alert('No New Deposits', 'Send MATIC to your deposit address and check again.');
+      }
+    }
+  };
 
   // When WalletConnect reports a newly connected wallet, sign and link it
   useEffect(() => {
@@ -201,6 +224,45 @@ export function WalletScreen() {
             )}
           </View>
 
+          {/* Crypto Deposit */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Deposit MATIC</Text>
+            <View style={styles.depositBox}>
+              <Text style={styles.depositNote}>
+                Send MATIC (Polygon) to your unique deposit address below.
+                Balance is credited automatically at the current MATIC/USD rate.
+              </Text>
+              {depositAddress ? (
+                <>
+                  <TouchableOpacity
+                    style={styles.addressCopyBox}
+                    onPress={() => {
+                      Clipboard.setString(depositAddress);
+                      Alert.alert('Copied', 'Deposit address copied to clipboard.');
+                    }}
+                  >
+                    <Text style={styles.depositAddress} numberOfLines={1} ellipsizeMode="middle">
+                      {depositAddress}
+                    </Text>
+                    <Text style={styles.copyHint}>Tap to copy</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.checkBtn, checkingDeposit && styles.btnDisabled]}
+                    onPress={handleCheckDeposit}
+                    disabled={checkingDeposit}
+                  >
+                    {checkingDeposit
+                      ? <ActivityIndicator color="#FFFFFF" size="small" />
+                      : <Text style={styles.checkBtnText}>Check for Deposits</Text>
+                    }
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <ActivityIndicator color="#FFD700" style={{ marginTop: 12 }} />
+              )}
+            </View>
+          </View>
+
           {/* Withdrawal */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Withdraw</Text>
@@ -290,4 +352,23 @@ const styles = StyleSheet.create({
 
   txLink:     { alignItems: 'center', paddingTop: 8 },
   txLinkText: { color: '#4A9EFF', fontSize: 13 },
+
+  depositBox: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+  },
+  depositNote: { color: 'rgba(255,255,255,0.45)', fontSize: 12, lineHeight: 18 },
+  addressCopyBox: {
+    backgroundColor: 'rgba(255,215,0,0.08)',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,215,0,0.2)',
+  },
+  depositAddress: { color: '#FFD700', fontSize: 13, fontWeight: '600', marginBottom: 4 },
+  copyHint:      { color: 'rgba(255,255,255,0.3)', fontSize: 11 },
+  checkBtn:      { backgroundColor: '#4A9EFF', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  checkBtnText:  { color: '#FFFFFF', fontWeight: '700' },
 });

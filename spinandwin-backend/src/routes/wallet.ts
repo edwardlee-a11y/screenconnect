@@ -10,6 +10,9 @@ import {
   getPrizePoolBalance,
   hasSufficientBalance,
   weiToUsd,
+  generateDepositAddress,
+  getAddressBalanceWei,
+  weiToUsdDeposit,
 } from '../services/blockchainService';
 import { sendWithdrawalConfirmationEmail } from '../services/emailService';
 
@@ -376,6 +379,110 @@ export async function walletRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send({
         transactions: data,
         pagination: { page, limit, total: count ?? 0, totalPages: Math.ceil((count ?? 0) / limit) },
+      });
+    },
+  );
+
+  // ── GET /api/v1/wallet/deposit-address ───────────────────────────────────
+  // Returns (or creates) the user's unique MATIC deposit address.
+
+  fastify.get(
+    '/deposit-address',
+    { preHandler: [authenticate] },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const uid = req.user.sub;
+
+      const { data: user } = await supabase
+        .from('users')
+        .select('deposit_address, deposit_index')
+        .eq('id', uid)
+        .single();
+
+      if (user?.deposit_address) {
+        return reply.send({ address: user.deposit_address });
+      }
+
+      // Assign next available index
+      const { count } = await supabase
+        .from('users')
+        .select('id', { count: 'exact', head: true })
+        .not('deposit_index', 'is', null);
+
+      const index = count ?? 0;
+      const address = generateDepositAddress(index);
+
+      await supabase
+        .from('users')
+        .update({ deposit_address: address, deposit_index: index })
+        .eq('id', uid);
+
+      return reply.send({ address });
+    },
+  );
+
+  // ── POST /api/v1/wallet/check-deposit ────────────────────────────────────
+  // Polls the user's deposit address for new MATIC and credits USD balance.
+
+  fastify.post(
+    '/check-deposit',
+    {
+      preHandler: [authenticate],
+      config: { rateLimit: { max: 6, timeWindow: '1 minute' } },
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const uid = req.user.sub;
+
+      const { data: user } = await supabase
+        .from('users')
+        .select('deposit_address, deposit_tracked_wei, balance_usd')
+        .eq('id', uid)
+        .single();
+
+      if (!user?.deposit_address) {
+        return reply.status(400).send({
+          statusCode: 400,
+          error: 'Bad Request',
+          message: 'No deposit address yet. Call GET /deposit-address first.',
+        });
+      }
+
+      const currentWei = await getAddressBalanceWei(user.deposit_address);
+      const trackedWei = BigInt(user.deposit_tracked_wei ?? '0');
+
+      if (currentWei <= trackedWei) {
+        return reply.send({ credited: 0, message: 'No new deposits detected.' });
+      }
+
+      const newWei = currentWei - trackedWei;
+      const creditedUsd = await weiToUsdDeposit(newWei);
+
+      // Credit balance + update tracked amount
+      const newBalance = parseFloat((user.balance_usd + creditedUsd).toFixed(2));
+
+      await supabase
+        .from('users')
+        .update({
+          balance_usd: newBalance,
+          deposit_tracked_wei: currentWei.toString(),
+        })
+        .eq('id', uid);
+
+      // Record deposit transaction
+      await supabase.from('transactions').insert({
+        user_id: uid,
+        type: 'deposit',
+        amount_usd: creditedUsd,
+        status: 'completed',
+        metadata: {
+          maticWei: newWei.toString(),
+          depositAddress: user.deposit_address,
+        },
+      });
+
+      return reply.send({
+        credited: creditedUsd,
+        newBalance,
+        message: `$${creditedUsd.toFixed(2)} credited to your account.`,
       });
     },
   );

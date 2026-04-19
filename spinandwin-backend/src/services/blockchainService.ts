@@ -297,3 +297,35 @@ export async function hasSufficientBalance(requiredUsd: number): Promise<boolean
   const { usd } = await getHotWalletBalance();
   return usd >= requiredUsd * 1.2; // 20% buffer for gas
 }
+
+// ─── Crypto deposit helpers ────────────────────────────────────────────────
+
+/**
+ * Derive a unique deposit address for a user using BIP-44 HD wallet.
+ * The master mnemonic is stored in DEPOSIT_WALLET_MNEMONIC env var.
+ * Each user gets a unique child address at m/44'/60'/0'/0/{index}.
+ */
+export function generateDepositAddress(index: number): string {
+  const mnemonic = process.env.DEPOSIT_WALLET_MNEMONIC;
+  if (!mnemonic) throw new Error('[blockchain] DEPOSIT_WALLET_MNEMONIC not set');
+  const hdNode = ethers.HDNodeWallet.fromPhrase(mnemonic);
+  const child = hdNode.derivePath(`m/44'/60'/0'/0/${index}`);
+  return child.address.toLowerCase();
+}
+
+/**
+ * Check the current MATIC balance of a deposit address on-chain.
+ * Returns the balance in wei as a bigint.
+ */
+export async function getAddressBalanceWei(address: string): Promise<bigint> {
+  return getProvider().getBalance(address);
+}
+
+/**
+ * Convert a MATIC amount in wei to USD using the current Chainlink price.
+ */
+export async function weiToUsdDeposit(wei: bigint): Promise<number> {
+  const rate = await getMATICPriceUSD();
+  const matic = parseFloat(ethers.formatEther(wei));
+  return parseFloat((matic * rate).toFixed(2));
+}

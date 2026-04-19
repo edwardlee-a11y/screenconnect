@@ -43,6 +43,23 @@ export interface RoomUpdatePayload {
   isReady: boolean;
 }
 
+export interface RoomRoundStartPayload {
+  tier: number;
+  roundId: string;
+  players: string[];
+  deadlineMs: number;
+}
+
+export interface RoomRoundResultPayload {
+  tier: number;
+  roundId: string;
+  winner: string;
+  winnerPayout: number;
+  platformFee: number;
+  pool: number;
+  results: Record<string, { outcomeLabel: string; multiplier: number; payout: number }>;
+}
+
 type ServerToClient = {
   'game:spin:result':   (p: SpinResultPayload) => void;
   'game:spin:error':    (p: { message: string; code?: string }) => void;

@@ -25,7 +25,7 @@ import {
   leaveRoom,
 } from '../services/socket';
 import type { SpinResult } from '../services/api';
-import type { RoomUpdatePayload } from '../services/socket';
+import type { RoomUpdatePayload, RoomRoundStartPayload, RoomRoundResultPayload } from '../services/socket';
 import type { GameStackParamList } from '../navigation/AppNavigator';
 
 const MIN_PLAYERS = 5;
@@ -57,6 +57,11 @@ export function GameScreen() {
   const [showResult,     setShowResult]     = useState(false);
   const [loadingSession, setLoadingSession] = useState(false);
   const [jackpotBanner,  setJackpotBanner]  = useState<string | null>(null);
+  const [roundId,        setRoundId]        = useState<string | null>(null);
+  const [hasSpun,        setHasSpun]        = useState(false);
+  const [countdown,      setCountdown]      = useState<number | null>(null);
+  const [roundResult,    setRoundResult]    = useState<RoomRoundResultPayload | null>(null);
+  const countdownRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Load wheel config ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -85,14 +90,49 @@ export function GameScreen() {
       }
     };
 
+    const onRoundStart = (payload: RoomRoundStartPayload) => {
+      if (payload.tier !== tier) return;
+      setRoundId(payload.roundId);
+      setHasSpun(false);
+      setRoundResult(null);
+
+      // Countdown timer
+      const tick = () => {
+        const remaining = Math.max(0, Math.ceil((payload.deadlineMs - Date.now()) / 1000));
+        setCountdown(remaining);
+        if (remaining <= 0 && countdownRef.current) {
+          clearInterval(countdownRef.current);
+          countdownRef.current = null;
+        }
+      };
+      tick();
+      countdownRef.current = setInterval(tick, 1000);
+    };
+
+    const onRoundResult = (payload: RoomRoundResultPayload) => {
+      if (payload.tier !== tier) return;
+      setRoundId(null);
+      setCountdown(null);
+      setRoundResult(payload);
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+        countdownRef.current = null;
+      }
+    };
+
     socket.on('game:jackpot', onJackpot);
     socket.on('leaderboard:update', onLeaderboard);
     socket.on('room:update', onRoomUpdate);
+    socket.on('room:round:start' as never, onRoundStart as never);
+    socket.on('room:round:result' as never, onRoundResult as never);
 
     return () => {
       socket.off('game:jackpot', onJackpot);
       socket.off('leaderboard:update', onLeaderboard);
       socket.off('room:update', onRoomUpdate);
+      socket.off('room:round:start' as never, onRoundStart as never);
+      socket.off('room:round:result' as never, onRoundResult as never);
+      if (countdownRef.current) clearInterval(countdownRef.current);
     };
   }, [tier]);
 
@@ -134,32 +174,16 @@ export function GameScreen() {
   }, []);
 
   // ── Spin handler ───────────────────────────────────────────────────────────
-  const handleSpin = useCallback(async () => {
-    if (isSpinning || !sessionId || loadingSession || !isRoomReady) return;
-
-    const balance = user?.balanceUsd ?? 0;
-    if (balance < tier) {
-      Alert.alert('Insufficient Balance', `You need $${tier.toFixed ? tier.toFixed(2) : tier} to spin in this room.`);
-      return;
-    }
+  const handleSpin = useCallback(() => {
+    if (isSpinning || !sessionId || loadingSession || !roundId || hasSpun) return;
 
     setSpinning(true);
+    setHasSpun(true);
     const clientSeed = generateClientSeed();
-    const { data, error } = await gameApi.spin(tier, clientSeed);
-
-    if (error) {
-      setSpinning(false);
-      Alert.alert('Spin Failed', error);
-      return;
-    }
-
-    if (data) {
-      setPendingResult(data);
-      setLastResult(data);
-      setTargetIndex(data.outcomeIndex);
-      updateUser({ balanceUsd: data.newBalanceUsd });
-    }
-  }, [isSpinning, sessionId, tier, user, loadingSession, isRoomReady]);
+    getSocket().emit('room:spin' as never, { tier, clientSeed } as never);
+    // Spin animation runs; result comes back via room:round:result
+    setTimeout(() => setSpinning(false), 4000);
+  }, [isSpinning, sessionId, roundId, hasSpun, tier, loadingSession]);
 
   const onSpinComplete = useCallback(() => {
     setSpinning(false);
@@ -172,7 +196,7 @@ export function GameScreen() {
     setPendingResult(null);
   }, []);
 
-  const spinDisabled = isSpinning || loadingSession || !isRoomReady;
+  const spinDisabled = isSpinning || loadingSession || !roundId || hasSpun;
 
   return (
     <LinearGradient colors={['#0D0D1A', '#16213E', '#0D0D1A']} style={styles.gradient}>
@@ -202,12 +226,26 @@ export function GameScreen() {
           {/* Room info */}
           <View style={styles.roomInfo}>
             <Text style={styles.roomTitle}>${tier.toLocaleString()} Room</Text>
-            <View style={[styles.roomBadge, isRoomReady ? styles.roomBadgeReady : styles.roomBadgeWaiting]}>
+            <View style={[styles.roomBadge, roundId ? styles.roomBadgeReady : styles.roomBadgeWaiting]}>
               <Text style={styles.roomBadgeText}>
-                {isRoomReady ? 'LIVE' : `${roomPlayerCount}/${MIN_PLAYERS} players`}
+                {roundId
+                  ? countdown !== null ? `${countdown}s` : 'ROUND'
+                  : `${roomPlayerCount}/${MIN_PLAYERS}`}
               </Text>
             </View>
           </View>
+
+          {/* Round result banner */}
+          {roundResult && (
+            <View style={styles.resultBanner}>
+              <Text style={styles.resultTitle}>
+                {roundResult.winner === (user?.username ?? '') ? '🏆 You Won!' : `Winner: ${roundResult.winner}`}
+              </Text>
+              <Text style={styles.resultSub}>
+                Prize: ${roundResult.winnerPayout.toFixed(2)}  ·  Pool: ${roundResult.pool.toFixed(2)}  ·  Platform: ${roundResult.platformFee.toFixed(2)}
+              </Text>
+            </View>
+          )}
 
           {/* Waiting overlay on wheel */}
           <View style={styles.wheelContainer}>
@@ -248,8 +286,10 @@ export function GameScreen() {
               <Text style={styles.spinBtnText}>
                 {isSpinning
                   ? 'Spinning...'
-                  : !isRoomReady
+                  : !roundId
                   ? 'Waiting for Players...'
+                  : hasSpun
+                  ? 'Waiting for Others...'
                   : `SPIN — $${tier}`}
               </Text>
             </LinearGradient>
@@ -324,6 +364,18 @@ const styles = StyleSheet.create({
     minHeight: 340,
     justifyContent: 'center',
   },
+
+  resultBanner: {
+    backgroundColor: 'rgba(255,215,0,0.12)',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,215,0,0.3)',
+    alignItems: 'center',
+  },
+  resultTitle: { color: '#FFD700', fontSize: 16, fontWeight: '800', marginBottom: 4 },
+  resultSub:   { color: 'rgba(255,255,255,0.5)', fontSize: 12, textAlign: 'center' },
 
   waitingOverlay: {
     position: 'absolute',

@@ -154,3 +154,27 @@ create or replace view public.alltime_leaderboard as
   group by u.id, u.username, u.total_wins, u.total_spins, u.total_wagered_usd
   order by u.total_wins desc
   limit 50;
+
+-- ─── CRYPTO DEPOSIT COLUMNS (migration) ──────────────────────────────────────
+alter table public.users add column if not exists deposit_address       text unique;
+alter table public.users add column if not exists deposit_index         integer unique;
+alter table public.users add column if not exists deposit_tracked_wei   text not null default '0';
+
+-- ─── ROOM ROUNDS ──────────────────────────────────────────────────────────────
+create table if not exists public.room_rounds (
+  id               uuid          primary key default gen_random_uuid(),
+  tier             integer       not null,
+  players          jsonb         not null default '[]',   -- [{ uid, username }]
+  spins            jsonb         not null default '{}',   -- { uid: { multiplier, outcomeLabel, outcomeIndex } }
+  winner_uid       text          references public.users(id),
+  pool_usd         numeric(12,2) not null default 0,
+  winner_payout_usd numeric(12,2),
+  platform_fee_usd numeric(12,2),
+  status           text          not null default 'active'
+                   check (status in ('active', 'complete', 'voided')),
+  started_at       timestamptz   not null default now(),
+  ended_at         timestamptz
+);
+
+create index if not exists idx_room_rounds_tier   on public.room_rounds(tier);
+create index if not exists idx_room_rounds_status on public.room_rounds(status);

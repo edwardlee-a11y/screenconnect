@@ -180,4 +180,13 @@ export const walletApi = {
     apiFetch<{ transactions: unknown[]; pagination: unknown }>(
       `/api/v1/wallet/transactions?page=${page}`,
     ),
+
+  getDepositAddress: () =>
+    apiFetch<{ address: string }>('/api/v1/wallet/deposit-address'),
+
+  checkDeposit: () =>
+    apiFetch<{ credited: number; newBalance: number; message: string }>(
+      '/api/v1/wallet/check-deposit',
+      { method: 'POST' },
+    ),
 };
