@@ -36,6 +36,13 @@ export interface LeaderboardEntry {
   payoutUsd: number;
 }
 
+export interface RoomUpdatePayload {
+  tier: number;
+  playerCount: number;
+  players: string[];
+  isReady: boolean;
+}
+
 type ServerToClient = {
   'game:spin:result':   (p: SpinResultPayload) => void;
   'game:spin:error':    (p: { message: string; code?: string }) => void;
@@ -44,6 +51,7 @@ type ServerToClient = {
   'game:player:left':   (p: { username: string; sessionId: string }) => void;
   'leaderboard:update': (p: LeaderboardEntry[]) => void;
   'chat:message':       (p: ChatPayload) => void;
+  'room:update':        (p: RoomUpdatePayload) => void;
   'error':              (p: { message: string; code?: string }) => void;
 };
 
@@ -51,6 +59,8 @@ type ClientToServer = {
   'game:join':    (p: { sessionId: string }) => void;
   'game:leave':   () => void;
   'chat:message': (p: { message: string }) => void;
+  'room:join':    (p: { tier: number }) => void;
+  'room:leave':   () => void;
 };
 
 // ─── Singleton socket instance ──────────────────────────────────────────────
@@ -102,5 +112,17 @@ export function joinGameSession(sessionId: string): void {
 export function leaveGameSession(): void {
   if (_socket?.connected) {
     _socket.emit('game:leave');
+  }
+}
+
+/** Emit room:join for the given tier. */
+export function joinRoom(tier: number): void {
+  getSocket().emit('room:join', { tier });
+}
+
+/** Emit room:leave. */
+export function leaveRoom(): void {
+  if (_socket?.connected) {
+    _socket.emit('room:leave');
   }
 }

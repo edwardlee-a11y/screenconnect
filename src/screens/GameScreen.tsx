@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SpinWheel } from '../components/SpinWheel';
 import { ResultModal } from '../components/ResultModal';
 import { gameApi } from '../services/api';
@@ -19,22 +21,36 @@ import {
   getSocket,
   joinGameSession,
   leaveGameSession,
+  joinRoom,
+  leaveRoom,
 } from '../services/socket';
 import type { SpinResult } from '../services/api';
+import type { RoomUpdatePayload } from '../services/socket';
+import type { GameStackParamList } from '../navigation/AppNavigator';
 
-// Generate a random client seed
+const MIN_PLAYERS = 5;
+
 function generateClientSeed(): string {
   const chars = 'abcdef0123456789';
   return Array.from({ length: 16 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
+type Props = NativeStackScreenProps<GameStackParamList, 'Game'>;
+
 export function GameScreen() {
-  const { user, updateUser }                       = useAuthStore();
-  const { sessionId, isSpinning, wheelSegments,
-          minWager, maxWager, wager,
-          setSession, clearSession, setSpinning,
-          setLastResult, setWheelConfig, setWager,
-          addJackpot, setLiveLeaderboard }          = useGameStore();
+  const navigation = useNavigation<NativeStackNavigationProp<GameStackParamList>>();
+  const route = useRoute<Props['route']>();
+  const tier = route.params?.tier ?? 1;
+
+  const { user, updateUser }     = useAuthStore();
+  const {
+    sessionId, isSpinning, wheelSegments,
+    setSession, clearSession, setSpinning,
+    setLastResult, setWheelConfig,
+    setCurrentRoom, updateRoomPlayers,
+    roomPlayerCount, roomPlayers, isRoomReady,
+    addJackpot, setLiveLeaderboard,
+  } = useGameStore();
 
   const [targetIndex,    setTargetIndex]    = useState<number | null>(null);
   const [pendingResult,  setPendingResult]  = useState<SpinResult | null>(null);
@@ -42,14 +58,14 @@ export function GameScreen() {
   const [loadingSession, setLoadingSession] = useState(false);
   const [jackpotBanner,  setJackpotBanner]  = useState<string | null>(null);
 
-  // ── Load wheel config ────────────────────────────────────────────────────
+  // ── Load wheel config ──────────────────────────────────────────────────────
   useEffect(() => {
     gameApi.getWheelConfig().then(({ data }) => {
       if (data) setWheelConfig(data.segments, data.minWager, data.maxWager);
     });
   }, []);
 
-  // ── Socket: listen for jackpot & leaderboard events ─────────────────────
+  // ── Socket: jackpot, leaderboard, room updates ─────────────────────────────
   useEffect(() => {
     const socket = getSocket();
 
@@ -63,24 +79,36 @@ export function GameScreen() {
       setLiveLeaderboard(entries);
     };
 
+    const onRoomUpdate = (payload: RoomUpdatePayload) => {
+      if (payload.tier === tier) {
+        updateRoomPlayers(payload.tier, payload.players, payload.isReady);
+      }
+    };
+
     socket.on('game:jackpot', onJackpot);
     socket.on('leaderboard:update', onLeaderboard);
+    socket.on('room:update', onRoomUpdate);
 
     return () => {
       socket.off('game:jackpot', onJackpot);
       socket.off('leaderboard:update', onLeaderboard);
+      socket.off('room:update', onRoomUpdate);
     };
-  }, []);
+  }, [tier]);
 
-  // ── Start session on mount ───────────────────────────────────────────────
+  // ── Join room + start session on mount ─────────────────────────────────────
   useEffect(() => {
+    setCurrentRoom(tier);
+    joinRoom(tier);
     if (!sessionId) startSession();
+
     return () => {
-      // End session and leave socket room on unmount
+      leaveRoom();
       if (sessionId) {
         leaveGameSession();
         gameApi.endSession();
       }
+      clearSession();
     };
   }, []);
 
@@ -89,7 +117,6 @@ export function GameScreen() {
     const { data, error } = await gameApi.startSession();
     if (error) {
       if (error.includes('already')) {
-        // Session exists — end it and create fresh
         await gameApi.endSession();
         const retry = await gameApi.startSession();
         if (retry.data) {
@@ -106,20 +133,19 @@ export function GameScreen() {
     setLoadingSession(false);
   }, []);
 
-  // ── Spin handler ─────────────────────────────────────────────────────────
+  // ── Spin handler ───────────────────────────────────────────────────────────
   const handleSpin = useCallback(async () => {
-    if (isSpinning || !sessionId || loadingSession) return;
+    if (isSpinning || !sessionId || loadingSession || !isRoomReady) return;
 
     const balance = user?.balanceUsd ?? 0;
-    if (balance < wager) {
-      Alert.alert('Insufficient Balance', `You need at least $${wager.toFixed(2)} to spin.`);
+    if (balance < tier) {
+      Alert.alert('Insufficient Balance', `You need $${tier.toFixed ? tier.toFixed(2) : tier} to spin in this room.`);
       return;
     }
 
     setSpinning(true);
     const clientSeed = generateClientSeed();
-
-    const { data, error } = await gameApi.spin(wager, clientSeed);
+    const { data, error } = await gameApi.spin(tier, clientSeed);
 
     if (error) {
       setSpinning(false);
@@ -128,21 +154,17 @@ export function GameScreen() {
     }
 
     if (data) {
-      // Store result — show modal after animation completes
       setPendingResult(data);
       setLastResult(data);
       setTargetIndex(data.outcomeIndex);
-      // Update balance immediately in store
       updateUser({ balanceUsd: data.newBalanceUsd });
     }
-  }, [isSpinning, sessionId, wager, user, loadingSession]);
+  }, [isSpinning, sessionId, tier, user, loadingSession, isRoomReady]);
 
   const onSpinComplete = useCallback(() => {
     setSpinning(false);
     setTargetIndex(null);
-    if (pendingResult) {
-      setShowResult(true);
-    }
+    if (pendingResult) setShowResult(true);
   }, [pendingResult]);
 
   const handleCloseResult = useCallback(() => {
@@ -150,13 +172,7 @@ export function GameScreen() {
     setPendingResult(null);
   }, []);
 
-  // ── Wager controls ───────────────────────────────────────────────────────
-  const adjustWager = (delta: number) => {
-    const next = Math.min(maxWager, Math.max(minWager, parseFloat((wager + delta).toFixed(2))));
-    setWager(next);
-  };
-
-  const WAGER_PRESETS = [0.5, 1, 5, 10, 25];
+  const spinDisabled = isSpinning || loadingSession || !isRoomReady;
 
   return (
     <LinearGradient colors={['#0D0D1A', '#16213E', '#0D0D1A']} style={styles.gradient}>
@@ -175,71 +191,66 @@ export function GameScreen() {
 
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.appTitle}>Spin & Win</Text>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+              <Text style={styles.backText}>← Rooms</Text>
+            </TouchableOpacity>
             <View style={styles.balancePill}>
-              <Text style={styles.balanceText}>
-                ${(user?.balanceUsd ?? 0).toFixed(2)}
+              <Text style={styles.balanceText}>${(user?.balanceUsd ?? 0).toFixed(2)}</Text>
+            </View>
+          </View>
+
+          {/* Room info */}
+          <View style={styles.roomInfo}>
+            <Text style={styles.roomTitle}>${tier.toLocaleString()} Room</Text>
+            <View style={[styles.roomBadge, isRoomReady ? styles.roomBadgeReady : styles.roomBadgeWaiting]}>
+              <Text style={styles.roomBadgeText}>
+                {isRoomReady ? 'LIVE' : `${roomPlayerCount}/${MIN_PLAYERS} players`}
               </Text>
             </View>
           </View>
 
-          {/* Wheel */}
+          {/* Waiting overlay on wheel */}
           <View style={styles.wheelContainer}>
             {loadingSession ? (
               <ActivityIndicator size="large" color="#FFD700" />
             ) : (
-              <SpinWheel
-                segments={wheelSegments}
-                targetIndex={targetIndex}
-                onSpinComplete={onSpinComplete}
-              />
+              <>
+                <SpinWheel
+                  segments={wheelSegments}
+                  targetIndex={targetIndex}
+                  onSpinComplete={onSpinComplete}
+                />
+                {!isRoomReady && (
+                  <View style={styles.waitingOverlay}>
+                    <Text style={styles.waitingEmoji}>⏳</Text>
+                    <Text style={styles.waitingTitle}>Waiting for players</Text>
+                    <Text style={styles.waitingCount}>{roomPlayerCount} / {MIN_PLAYERS} joined</Text>
+                    {roomPlayers.length > 0 && (
+                      <Text style={styles.waitingNames}>{roomPlayers.join(', ')}</Text>
+                    )}
+                  </View>
+                )}
+              </>
             )}
-          </View>
-
-          {/* Wager controls */}
-          <View style={styles.wagerSection}>
-            <Text style={styles.wagerLabel}>Wager Amount</Text>
-
-            <View style={styles.wagerRow}>
-              <TouchableOpacity style={styles.wagerBtn} onPress={() => adjustWager(-0.5)}>
-                <Text style={styles.wagerBtnText}>−</Text>
-              </TouchableOpacity>
-              <View style={styles.wagerDisplay}>
-                <Text style={styles.wagerAmount}>${wager.toFixed(2)}</Text>
-              </View>
-              <TouchableOpacity style={styles.wagerBtn} onPress={() => adjustWager(0.5)}>
-                <Text style={styles.wagerBtnText}>+</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.presetsRow}>
-              {WAGER_PRESETS.map((preset) => (
-                <TouchableOpacity
-                  key={preset}
-                  style={[styles.preset, wager === preset && styles.presetActive]}
-                  onPress={() => setWager(preset)}
-                >
-                  <Text style={[styles.presetText, wager === preset && styles.presetTextActive]}>
-                    ${preset}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
           </View>
 
           {/* Spin button */}
           <TouchableOpacity
-            style={[styles.spinBtn, (isSpinning || loadingSession) && styles.spinBtnDisabled]}
+            style={[styles.spinBtn, spinDisabled && styles.spinBtnDisabled]}
             onPress={handleSpin}
             activeOpacity={0.85}
-            disabled={isSpinning || loadingSession}
+            disabled={spinDisabled}
           >
             <LinearGradient
-              colors={isSpinning ? ['#555', '#333'] : ['#E94560', '#C0392B']}
+              colors={spinDisabled ? ['#555', '#333'] : ['#E94560', '#C0392B']}
               style={styles.spinBtnGradient}
             >
               <Text style={styles.spinBtnText}>
-                {isSpinning ? 'Spinning...' : 'SPIN'}
+                {isSpinning
+                  ? 'Spinning...'
+                  : !isRoomReady
+                  ? 'Waiting for Players...'
+                  : `SPIN — $${tier}`}
               </Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -273,13 +284,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFD700',
     paddingVertical: 8,
     paddingHorizontal: 16,
-    marginHorizontal: 0,
   },
   jackpotBannerText: {
-    color: '#0D0D1A',
-    fontWeight: '800',
-    fontSize: 13,
-    textAlign: 'center',
+    color: '#0D0D1A', fontWeight: '800', fontSize: 13, textAlign: 'center',
   },
 
   header: {
@@ -288,7 +295,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
   },
-  appTitle: { color: '#FFD700', fontSize: 22, fontWeight: '800' },
+  backBtn:    { paddingVertical: 6, paddingRight: 12 },
+  backText:   { color: '#FFD700', fontSize: 15, fontWeight: '600' },
   balancePill: {
     backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 20,
@@ -297,49 +305,44 @@ const styles = StyleSheet.create({
   },
   balanceText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
 
+  roomInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 8,
+  },
+  roomTitle: { color: '#FFD700', fontSize: 20, fontWeight: '800' },
+  roomBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  roomBadgeReady:   { backgroundColor: 'rgba(46,213,115,0.2)' },
+  roomBadgeWaiting: { backgroundColor: 'rgba(255,200,0,0.15)' },
+  roomBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+
   wheelContainer: {
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: 20,
     minHeight: 340,
     justifyContent: 'center',
   },
 
-  wagerSection:  { marginBottom: 20 },
-  wagerLabel:    { color: 'rgba(255,255,255,0.5)', fontSize: 13, marginBottom: 10 },
-  wagerRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  wagerBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center',
+  waitingOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(13,13,26,0.85)',
+    borderRadius: 180,
     justifyContent: 'center',
-  },
-  wagerBtnText:  { color: '#FFFFFF', fontSize: 22, fontWeight: '700' },
-  wagerDisplay: {
-    flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 12,
-    paddingVertical: 12,
     alignItems: 'center',
+    paddingHorizontal: 24,
   },
-  wagerAmount:   { color: '#FFD700', fontSize: 22, fontWeight: '800' },
-  presetsRow:    { flexDirection: 'row', gap: 8 },
-  preset: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    alignItems: 'center',
-  },
-  presetActive:    { backgroundColor: 'rgba(233,69,96,0.3)', borderColor: '#E94560', borderWidth: 1 },
-  presetText:      { color: 'rgba(255,255,255,0.6)', fontSize: 13 },
-  presetTextActive:{ color: '#FFFFFF', fontWeight: '700' },
+  waitingEmoji: { fontSize: 40, marginBottom: 10 },
+  waitingTitle: { color: '#FFD700', fontSize: 18, fontWeight: '800', marginBottom: 6 },
+  waitingCount: { color: '#fff', fontSize: 14, marginBottom: 8 },
+  waitingNames: { color: 'rgba(255,255,255,0.5)', fontSize: 12, textAlign: 'center' },
 
   spinBtn:         { borderRadius: 18, overflow: 'hidden', marginBottom: 24 },
   spinBtnDisabled: { opacity: 0.6 },
   spinBtnGradient: { paddingVertical: 18, alignItems: 'center' },
-  spinBtnText:     { color: '#FFFFFF', fontSize: 20, fontWeight: '900', letterSpacing: 2 },
+  spinBtnText:     { color: '#FFFFFF', fontSize: 18, fontWeight: '900', letterSpacing: 1 },
 
   oddsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   oddsItem: {

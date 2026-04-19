@@ -45,6 +45,12 @@ export interface WheelSegment {
   multiplier: number;
 }
 
+export interface RoomInfo {
+  tier: number;
+  playerCount: number;
+  isReady: boolean;
+}
+
 export interface LeaderboardEntry {
   rank: number;
   username: string;
@@ -81,6 +87,11 @@ async function apiFetch<T>(
 }
 
 // ─── Auth API ──────────────────────────────────────────────────────────────
+
+export const roomsApi = {
+  getRooms: () =>
+    apiFetch<{ rooms: RoomInfo[] }>('/api/v1/games/rooms'),
+};
 
 export const authApi = {
   login: (firebaseToken: string, username?: string) =>

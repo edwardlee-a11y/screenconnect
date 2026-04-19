@@ -14,6 +14,12 @@ interface GameState {
   maxWager: number;
   wager: number;
 
+  // Room state
+  currentRoomTier: number | null;
+  roomPlayerCount: number;
+  roomPlayers: string[];
+  isRoomReady: boolean;
+
   // Real-time socket state
   jackpotHistory: JackpotPayload[];
   liveLeaderboard: LeaderboardEntry[];
@@ -24,6 +30,8 @@ interface GameState {
   setLastResult: (result: SpinResult) => void;
   setWheelConfig: (segments: WheelSegment[], min: number, max: number) => void;
   setWager: (val: number) => void;
+  setCurrentRoom: (tier: number | null) => void;
+  updateRoomPlayers: (tier: number, players: string[], isReady: boolean) => void;
   addJackpot: (payload: JackpotPayload) => void;
   setLiveLeaderboard: (entries: LeaderboardEntry[]) => void;
 }
@@ -35,10 +43,15 @@ export const useGameStore = create<GameState>((set) => ({
   lastResult:      null,
   wheelSegments:   [],
   minWager:        0.10,
-  maxWager:        100.00,
+  maxWager:        10000.00,
   wager:           1.00,
   jackpotHistory:  [],
   liveLeaderboard: [],
+
+  currentRoomTier:  null,
+  roomPlayerCount:  0,
+  roomPlayers:      [],
+  isRoomReady:      false,
 
   setSession: (sessionId, serverSeedHash) =>
     set({ sessionId, serverSeedHash }),
@@ -54,6 +67,16 @@ export const useGameStore = create<GameState>((set) => ({
     set({ wheelSegments: segments, minWager: min, maxWager: max }),
 
   setWager: (val) => set({ wager: val }),
+
+  setCurrentRoom: (tier) =>
+    set({ currentRoomTier: tier, roomPlayerCount: 0, roomPlayers: [], isRoomReady: false }),
+
+  updateRoomPlayers: (tier, players, isReady) =>
+    set((state) =>
+      state.currentRoomTier === tier
+        ? { roomPlayerCount: players.length, roomPlayers: players, isRoomReady: isReady }
+        : {},
+    ),
 
   addJackpot: (payload) =>
     set((state) => ({

@@ -58,6 +58,9 @@ export const Keys = {
 
   // Rate limiting
   rateLimitSpin: (uid: string) => `rl:spin:${uid}`,     // Max spins/min per user
+
+  // Rooms — tracks connected players per tier
+  roomPlayers: (tier: number) => `room:${tier}:players`,
 } as const;
 
 // ─── Helpers ───────────────────────────────────────────────────────────────

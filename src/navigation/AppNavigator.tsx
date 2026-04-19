@@ -5,6 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, ActivityIndicator, View } from 'react-native';
 
 import { AuthScreen }            from '../screens/AuthScreen';
+import { RoomsScreen }           from '../screens/RoomsScreen';
 import { GameScreen }            from '../screens/GameScreen';
 import { WalletScreen }          from '../screens/WalletScreen';
 import { HistoryScreen }         from '../screens/HistoryScreen';
@@ -13,11 +14,26 @@ import { AccountSettingsScreen } from '../screens/AccountSettingsScreen';
 import { FairnessScreen }        from '../screens/FairnessScreen';
 import { useAuthStore }          from '../store/authStore';
 
+export type GameStackParamList = {
+  Rooms: undefined;
+  Game:  { tier: number };
+};
+
+const GameStack = createNativeStackNavigator<GameStackParamList>();
 const Stack = createNativeStackNavigator();
 const Tab   = createBottomTabNavigator();
 
 function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
   return <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.4 }}>{emoji}</Text>;
+}
+
+function GameStackNavigator() {
+  return (
+    <GameStack.Navigator screenOptions={{ headerShown: false }}>
+      <GameStack.Screen name="Rooms" component={RoomsScreen} />
+      <GameStack.Screen name="Game"  component={GameScreen} />
+    </GameStack.Navigator>
+  );
 }
 
 function MainTabs() {
@@ -41,7 +57,7 @@ function MainTabs() {
     >
       <Tab.Screen
         name="Game"
-        component={GameScreen}
+        component={GameStackNavigator}
         options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🎰" focused={focused} /> }}
       />
       <Tab.Screen

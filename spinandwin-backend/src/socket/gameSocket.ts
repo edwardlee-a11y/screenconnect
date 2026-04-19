@@ -11,6 +11,8 @@ interface ClientEvents {
   'game:leave':   () => void;
   'game:spin':    (payload: SpinPayload) => void;
   'chat:message': (payload: { message: string }) => void;
+  'room:join':    (payload: { tier: number }) => void;
+  'room:leave':   () => void;
 }
 
 // Server → Client
@@ -22,6 +24,7 @@ interface ServerEvents {
   'game:player:left':   (payload: PlayerPayload) => void;
   'leaderboard:update': (payload: LeaderboardEntry[]) => void;
   'chat:message':       (payload: ChatPayload) => void;
+  'room:update':        (payload: RoomUpdatePayload) => void;
   'error':              (payload: ErrorPayload) => void;
 }
 
@@ -30,6 +33,7 @@ interface SocketData {
   uid: string;
   username: string;
   sessionId: string | null;
+  currentRoom: number | null;
 }
 
 interface SpinPayload {
@@ -77,6 +81,18 @@ interface ErrorPayload {
   code?: string;
 }
 
+interface RoomUpdatePayload {
+  tier: number;
+  playerCount: number;
+  players: string[];
+  isReady: boolean;
+}
+
+// ─── Room config ───────────────────────────────────────────────────────────
+
+const ROOM_TIERS = [5, 25, 50, 100, 200, 500, 1000, 5000, 10000];
+const MIN_PLAYERS_TO_PLAY = 5;
+
 // ─── Wheel config (must match games.ts) ───────────────────────────────────
 
 interface WheelSegment {
@@ -103,7 +119,7 @@ const WHEEL: WheelSegment[] = [
 const WHEEL_TOTAL_WEIGHT = WHEEL.reduce((s, seg) => s + seg.weight, 0);
 
 const MIN_WAGER_USD = 0.10;
-const MAX_WAGER_USD = 100.00;
+const MAX_WAGER_USD = 10000.00;
 const CHAT_MAX_LENGTH = 120;
 const CHAT_RATE_LIMIT = 5; // messages per 10 seconds
 
@@ -173,6 +189,7 @@ export function registerGameSocket(
       socket.data.uid = payload.sub;
       socket.data.username = payload.username;
       socket.data.sessionId = null;
+      socket.data.currentRoom = null;
 
       next();
     } catch {
@@ -383,13 +400,78 @@ export function registerGameSocket(
       });
     });
 
+    // ── room:join ──────────────────────────────────────────────────────────
+    socket.on('room:join', async ({ tier }) => {
+      if (!ROOM_TIERS.includes(tier)) {
+        socket.emit('error', { message: 'Invalid room tier.', code: 'INVALID_ROOM' });
+        return;
+      }
+
+      // Leave current room first
+      const prev = socket.data.currentRoom;
+      if (prev !== null) {
+        await redis.srem(Keys.roomPlayers(prev), username);
+        socket.leave(`room:${prev}`);
+        const prevPlayers = await redis.smembers<string[]>(Keys.roomPlayers(prev));
+        io.to(`room:${prev}`).emit('room:update', {
+          tier: prev,
+          playerCount: prevPlayers.length,
+          players: prevPlayers,
+          isReady: prevPlayers.length >= MIN_PLAYERS_TO_PLAY,
+        });
+      }
+
+      await redis.sadd(Keys.roomPlayers(tier), username);
+      socket.data.currentRoom = tier;
+      await socket.join(`room:${tier}`);
+
+      const players = await redis.smembers<string[]>(Keys.roomPlayers(tier));
+      const update: RoomUpdatePayload = {
+        tier,
+        playerCount: players.length,
+        players,
+        isReady: players.length >= MIN_PLAYERS_TO_PLAY,
+      };
+      io.to(`room:${tier}`).emit('room:update', update);
+    });
+
+    // ── room:leave ─────────────────────────────────────────────────────────
+    socket.on('room:leave', async () => {
+      const tier = socket.data.currentRoom;
+      if (tier === null) return;
+
+      await redis.srem(Keys.roomPlayers(tier), username);
+      socket.data.currentRoom = null;
+      socket.leave(`room:${tier}`);
+
+      const players = await redis.smembers<string[]>(Keys.roomPlayers(tier));
+      io.to(`room:${tier}`).emit('room:update', {
+        tier,
+        playerCount: players.length,
+        players,
+        isReady: players.length >= MIN_PLAYERS_TO_PLAY,
+      });
+    });
+
     // ── disconnect ─────────────────────────────────────────────────────────
-    socket.on('disconnect', (reason) => {
-      const { sessionId } = socket.data;
+    socket.on('disconnect', async (reason) => {
+      const { sessionId, currentRoom } = socket.data;
       console.log(`[socket] disconnected: ${username} — ${reason}`);
 
       if (sessionId) {
         socket.to('lobby').emit('game:player:left', { username, sessionId });
+      }
+
+      // Clean up room membership on disconnect
+      if (currentRoom !== null) {
+        await redis.srem(Keys.roomPlayers(currentRoom), username);
+        const players = await redis.smembers<string[]>(Keys.roomPlayers(currentRoom));
+        io.to(`room:${currentRoom}`).emit('room:update', {
+          tier: currentRoom,
+          playerCount: players.length,
+          players,
+          isReady: players.length >= MIN_PLAYERS_TO_PLAY,
+        });
       }
     });
   });

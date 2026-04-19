@@ -33,7 +33,10 @@ const WHEEL: WheelSegment[] = [
 const WHEEL_TOTAL_WEIGHT = WHEEL.reduce((sum, s) => sum + s.weight, 0); // 1000
 
 const MIN_WAGER_USD = 0.10;
-const MAX_WAGER_USD = 100.00;
+const MAX_WAGER_USD = 10000.00;
+
+const ROOM_TIERS = [5, 25, 50, 100, 200, 500, 1000, 5000, 10000];
+const MIN_PLAYERS_TO_PLAY = 5;
 
 // ─── Provably fair RNG ─────────────────────────────────────────────────────
 
@@ -73,6 +76,23 @@ function computeOutcome(
 // ─── Route plugin ──────────────────────────────────────────────────────────
 
 export async function gameRoutes(fastify: FastifyInstance): Promise<void> {
+
+  // ── GET /api/v1/games/rooms ───────────────────────────────────────────────
+  // Returns all room tiers with current player counts. No auth required.
+
+  fastify.get('/rooms', async (_req, reply) => {
+    const rooms = await Promise.all(
+      ROOM_TIERS.map(async (tier) => {
+        const players = await redis.smembers<string[]>(Keys.roomPlayers(tier));
+        return {
+          tier,
+          playerCount: players.length,
+          isReady: players.length >= MIN_PLAYERS_TO_PLAY,
+        };
+      }),
+    );
+    return reply.send({ rooms });
+  });
 
   // ── GET /api/v1/games/wheel-config ────────────────────────────────────────
   // Returns the public wheel layout — no auth required.
