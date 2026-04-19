@@ -110,7 +110,7 @@ export function AuthScreen() {
           <View style={styles.logoSection}>
             <Text style={styles.logo}>🎰</Text>
             <Text style={styles.title}>Spin & Win</Text>
-            <Text style={styles.subtitle}>Crypto Wheel Game</Text>
+            <Text style={styles.subtitle}>Spin & Win</Text>
           </View>
 
           {/* Mode toggle */}
@@ -186,7 +186,7 @@ export function AuthScreen() {
           </View>
 
           <Text style={styles.disclaimer}>
-            Must be 18+ to play. Crypto gambling involves risk.
+            Play responsibly. For entertainment purposes only.
           </Text>
         </KeyboardAvoidingView>
       </SafeAreaView>
