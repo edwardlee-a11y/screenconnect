@@ -57,7 +57,8 @@ export function AuthScreen() {
       }
 
       // At this point mode is always 'login' (register path returns early above)
-      const { data, error } = await authApi.login(firebaseToken, undefined);
+      // Pass username so the backend can create the Supabase record on first login.
+      const { data, error } = await authApi.login(firebaseToken, username || undefined);
 
       if (error) {
         Alert.alert('Login Failed', error);
