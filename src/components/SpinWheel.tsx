@@ -1,14 +1,11 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import {
   Canvas,
   Path,
   Skia,
   vec,
   Group,
-  Text,
-  useFont,
-  Fill,
 } from '@shopify/react-native-skia';
 import Animated, {
   useSharedValue,
@@ -89,13 +86,11 @@ export function SpinWheel({ segments, targetIndex, onSpinComplete }: SpinWheelPr
       <View style={styles.pointer} />
 
       <Animated.View style={[{ width: WHEEL_SIZE, height: WHEEL_SIZE }, animatedStyle]}>
-        <Canvas style={{ width: WHEEL_SIZE, height: WHEEL_SIZE }}>
+        <Canvas style={{ width: WHEEL_SIZE, height: WHEEL_SIZE, position: 'absolute' }}>
           {segments.map((seg, i) => {
             const startAngle = i * SEGMENT_ANGLE - Math.PI / 2;
-            const endAngle   = startAngle + SEGMENT_ANGLE;
             const color      = SEGMENT_COLORS[seg.label] ?? '#333';
 
-            // Build pie slice path
             const path = Skia.Path.Make();
             path.moveTo(RADIUS, RADIUS);
             path.arcToOval(
@@ -106,20 +101,14 @@ export function SpinWheel({ segments, targetIndex, onSpinComplete }: SpinWheelPr
             );
             path.close();
 
-            // Label position (midpoint of arc, 65% of radius)
-            const midAngle = startAngle + SEGMENT_ANGLE / 2;
-            const labelR   = RADIUS * 0.65;
-            const labelX   = RADIUS + Math.cos(midAngle) * labelR;
-            const labelY   = RADIUS + Math.sin(midAngle) * labelR;
-
             return (
               <Group key={i}>
                 <Path path={path} color={color} />
                 <Path
                   path={path}
-                  color="rgba(255,255,255,0.08)"
+                  color="rgba(255,255,255,0.12)"
                   style="stroke"
-                  strokeWidth={1}
+                  strokeWidth={1.5}
                 />
               </Group>
             );
@@ -145,6 +134,51 @@ export function SpinWheel({ segments, targetIndex, onSpinComplete }: SpinWheelPr
             strokeWidth={2}
           />
         </Canvas>
+
+        {/* Segment labels — rotate with the wheel */}
+        {segments.map((seg, i) => {
+          const startAngle = i * SEGMENT_ANGLE - Math.PI / 2;
+          const midAngle   = startAngle + SEGMENT_ANGLE / 2;
+          const labelR     = RADIUS * 0.63;
+          const labelX     = RADIUS + Math.cos(midAngle) * labelR;
+          const labelY     = RADIUS + Math.sin(midAngle) * labelR;
+          const rotateDeg  = (midAngle * 180) / Math.PI + 90;
+          const isLose     = seg.label === 'LOSE';
+          const isJackpot  = seg.label === 'JACKPOT';
+
+          return (
+            <View
+              key={`lbl-${i}`}
+              style={{
+                position: 'absolute',
+                left: labelX - 24,
+                top: labelY - 12,
+                width: 48,
+                height: 24,
+                alignItems: 'center',
+                justifyContent: 'center',
+                transform: [{ rotate: `${rotateDeg}deg` }],
+              }}
+            >
+              <Text
+                style={{
+                  color: isJackpot
+                    ? '#0D0D1A'
+                    : isLose
+                    ? 'rgba(255,255,255,0.25)'
+                    : '#FFFFFF',
+                  fontSize: isJackpot ? 8 : 11,
+                  fontWeight: '900',
+                  textAlign: 'center',
+                  letterSpacing: isJackpot ? 0.5 : 0,
+                }}
+                numberOfLines={1}
+              >
+                {isLose ? '✕' : seg.label}
+              </Text>
+            </View>
+          );
+        })}
       </Animated.View>
     </View>
   );
