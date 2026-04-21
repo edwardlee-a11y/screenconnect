@@ -13,7 +13,6 @@ import { WalletScreen }          from '../screens/WalletScreen';
 import { HistoryScreen }         from '../screens/HistoryScreen';
 import { LeaderboardScreen }     from '../screens/LeaderboardScreen';
 import { AccountSettingsScreen } from '../screens/AccountSettingsScreen';
-import { FairnessScreen }        from '../screens/FairnessScreen';
 import { AdminDashboardScreen }  from '../screens/AdminDashboardScreen';
 import { useAuthStore }          from '../store/authStore';
 
@@ -87,11 +86,6 @@ function MainTabs() {
         name="Wallet"
         component={WalletScreen}
         options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="💰" focused={focused} /> }}
-      />
-      <Tab.Screen
-        name="Fairness"
-        component={FairnessScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🔍" focused={focused} /> }}
       />
       <Tab.Screen
         name="Profile"
