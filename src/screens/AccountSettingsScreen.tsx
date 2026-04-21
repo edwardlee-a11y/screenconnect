@@ -187,6 +187,19 @@ export function AccountSettingsScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* ── Admin (owner only) ──────────────────────────────────────── */}
+          {user?.email === 'servicenear0@gmail.com' && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Admin</Text>
+              <TouchableOpacity
+                style={[styles.btn, styles.btnAdmin]}
+                onPress={() => navigation.navigate('AdminDashboard')}
+              >
+                <Text style={[styles.btnText, { color: '#FFD700' }]}>⚙️ Admin Dashboard</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* ── Danger zone ─────────────────────────────────────────────── */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Session</Text>
