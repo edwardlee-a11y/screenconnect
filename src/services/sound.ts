@@ -19,10 +19,10 @@ export const Haptics = {
 type SoundKey = 'spin' | 'win' | 'lose' | 'jackpot';
 
 const SOUND_FILES: Record<SoundKey, number | null> = {
-  spin:    null, // require('../../assets/sounds/spin.mp3'),
-  win:     null, // require('../../assets/sounds/win.mp3'),
-  lose:    null, // require('../../assets/sounds/lose.mp3'),
-  jackpot: null, // require('../../assets/sounds/jackpot.mp3'),
+  spin:    require('../../assets/sounds/spin.mp3'),
+  win:     require('../../assets/sounds/win.mp3'),
+  lose:    require('../../assets/sounds/lose.mp3'),
+  jackpot: require('../../assets/sounds/jackpot.mp3'),
 };
 
 const loaded: Partial<Record<SoundKey, Audio.Sound>> = {};
