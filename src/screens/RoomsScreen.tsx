@@ -1,22 +1,25 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
-  StyleSheet, ActivityIndicator, RefreshControl,
+  StyleSheet, ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { roomsApi, type RoomInfo } from '../services/api';
 import { getSocket } from '../services/socket';
 import { useGameStore } from '../store/gameStore';
+import { useAuthStore } from '../store/authStore';
 import type { RoomUpdatePayload } from '../services/socket';
 import type { GameStackParamList } from '../navigation/AppNavigator';
 
-const ROOM_TIERS = [5, 25, 50, 100, 200, 500, 1000, 5000, 10000];
-const MIN_PLAYERS = 5;
+const ROOM_TIERS  = [5, 25, 50, 100, 200, 500, 1000, 5000, 10000];
+const MIN_PLAYERS = 2;
+const MAX_PLAYERS = 5;
 
 export function RoomsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<GameStackParamList>>();
   const { updateRoomPlayers } = useGameStore();
+  const { user } = useAuthStore();
   const [rooms, setRooms]       = useState<RoomInfo[]>([]);
   const [loading, setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,6 +51,15 @@ export function RoomsScreen() {
   }, [fetchRooms, updateRoomPlayers]);
 
   const handleJoin = (tier: number) => {
+    const balance = user?.balanceUsd ?? 0;
+    if (balance < tier) {
+      Alert.alert(
+        'Insufficient Balance',
+        `You need $${tier.toLocaleString()} to enter this room. Your balance: $${balance.toFixed(2)}`,
+        [{ text: 'OK' }],
+      );
+      return;
+    }
     navigation.navigate('Game', { tier });
   };
 
@@ -62,7 +74,7 @@ export function RoomsScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Choose a Room</Text>
-      <Text style={styles.subtitle}>Need {MIN_PLAYERS} players to start spinning</Text>
+      <Text style={styles.subtitle}>{MIN_PLAYERS}–{MAX_PLAYERS} players per session · Real money</Text>
 
       <FlatList
         data={rooms.length ? rooms : ROOM_TIERS.map((tier) => ({ tier, playerCount: 0, isReady: false }))}
@@ -78,10 +90,12 @@ export function RoomsScreen() {
           />
         }
         renderItem={({ item }) => {
-          const pct = Math.min(item.playerCount / MIN_PLAYERS, 1);
+          const maxP = item.maxPlayers ?? MAX_PLAYERS;
+          const pct  = Math.min(item.playerCount / maxP, 1);
+          const ready = item.playerCount >= MIN_PLAYERS;
           return (
             <TouchableOpacity
-              style={[styles.card, item.isReady && styles.cardReady]}
+              style={[styles.card, ready && styles.cardReady]}
               onPress={() => handleJoin(item.tier)}
               activeOpacity={0.8}
             >
@@ -93,11 +107,11 @@ export function RoomsScreen() {
               </View>
 
               <Text style={styles.players}>
-                {item.playerCount}/{MIN_PLAYERS} players
+                {item.playerCount}/{maxP} players
               </Text>
-              <View style={[styles.badge, item.isReady ? styles.badgeReady : styles.badgeWaiting]}>
+              <View style={[styles.badge, ready ? styles.badgeReady : styles.badgeWaiting]}>
                 <Text style={styles.badgeText}>
-                  {item.isReady ? 'READY' : 'WAITING'}
+                  {item.playerCount >= maxP ? 'FULL' : ready ? 'READY' : 'WAITING'}
                 </Text>
               </View>
             </TouchableOpacity>

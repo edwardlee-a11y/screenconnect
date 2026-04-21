@@ -61,6 +61,9 @@ export const Keys = {
 
   // Rooms — tracks connected players per tier
   roomPlayers: (tier: number) => `room:${tier}:players`,
+
+  // Push notifications — Expo push token per user
+  pushToken: (uid: string) => `push:token:${uid}`,
 } as const;
 
 // ─── Helpers ───────────────────────────────────────────────────────────────

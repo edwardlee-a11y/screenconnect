@@ -22,7 +22,16 @@
       },
       "package": "com.spinandwin.app"
     },
-    "plugins": [],
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#0D0D1A",
+          "sounds": []
+        }
+      ]
+    ],
     "scheme": "spinandwin",
     "extra": {
       "apiUrl": "https://spinandwin-production.up.railway.app",

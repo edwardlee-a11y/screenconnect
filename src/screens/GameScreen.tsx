@@ -14,7 +14,9 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SpinWheel } from '../components/SpinWheel';
 import { ResultModal } from '../components/ResultModal';
+import { ChatPanel } from '../components/ChatPanel';
 import { gameApi } from '../services/api';
+import { Haptics, Sounds } from '../services/sound';
 import { useAuthStore } from '../store/authStore';
 import { useGameStore } from '../store/gameStore';
 import {
@@ -28,7 +30,7 @@ import type { SpinResult } from '../services/api';
 import type { RoomUpdatePayload, RoomRoundStartPayload, RoomRoundResultPayload } from '../services/socket';
 import type { GameStackParamList } from '../navigation/AppNavigator';
 
-const MIN_PLAYERS = 5;
+const MIN_PLAYERS = 2;
 
 function generateClientSeed(): string {
   const chars = 'abcdef0123456789';
@@ -118,20 +120,28 @@ export function GameScreen() {
         clearInterval(countdownRef.current);
         countdownRef.current = null;
       }
+      // Haptics + sound on result
+      const myResult = payload.results[user?.username ?? ''];
+      if (payload.winner === user?.username) {
+        if (myResult?.outcomeLabel === 'JACKPOT') { Haptics.jackpot(); Sounds.jackpot(); }
+        else { Haptics.win(); Sounds.win(); }
+      } else {
+        Haptics.lose(); Sounds.lose();
+      }
     };
 
     socket.on('game:jackpot', onJackpot);
     socket.on('leaderboard:update', onLeaderboard);
     socket.on('room:update', onRoomUpdate);
-    socket.on('room:round:start' as never, onRoundStart as never);
-    socket.on('room:round:result' as never, onRoundResult as never);
+    socket.on('room:round:start', onRoundStart);
+    socket.on('room:round:result', onRoundResult);
 
     return () => {
       socket.off('game:jackpot', onJackpot);
       socket.off('leaderboard:update', onLeaderboard);
       socket.off('room:update', onRoomUpdate);
-      socket.off('room:round:start' as never, onRoundStart as never);
-      socket.off('room:round:result' as never, onRoundResult as never);
+      socket.off('room:round:start', onRoundStart);
+      socket.off('room:round:result', onRoundResult);
       if (countdownRef.current) clearInterval(countdownRef.current);
     };
   }, [tier]);
@@ -151,6 +161,22 @@ export function GameScreen() {
       clearSession();
     };
   }, []);
+
+  // ── Reconnect: re-join room and session after socket drop ──────────────────
+  useEffect(() => {
+    const socket = getSocket();
+
+    const onReconnect = () => {
+      joinRoom(tier);
+      const currentSessionId = useGameStore.getState().sessionId;
+      if (currentSessionId) {
+        joinGameSession(currentSessionId);
+      }
+    };
+
+    socket.io.on('reconnect', onReconnect);
+    return () => { socket.io.off('reconnect', onReconnect); };
+  }, [tier]);
 
   const startSession = useCallback(async () => {
     setLoadingSession(true);
@@ -179,8 +205,10 @@ export function GameScreen() {
 
     setSpinning(true);
     setHasSpun(true);
+    Haptics.spinStart();
+    Sounds.spin();
     const clientSeed = generateClientSeed();
-    getSocket().emit('room:spin' as never, { tier, clientSeed } as never);
+    getSocket().emit('room:spin', { tier, clientSeed });
     // Spin animation runs; result comes back via room:round:result
     setTimeout(() => setSpinning(false), 4000);
   }, [isSpinning, sessionId, roundId, hasSpun, tier, loadingSession]);
@@ -304,6 +332,8 @@ export function GameScreen() {
             ))}
           </View>
         </ScrollView>
+
+        <ChatPanel />
 
         <ResultModal
           visible={showResult}

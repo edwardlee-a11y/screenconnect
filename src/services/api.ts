@@ -48,7 +48,20 @@ export interface WheelSegment {
 export interface RoomInfo {
   tier: number;
   playerCount: number;
+  maxPlayers?: number;
   isReady: boolean;
+  isFull?: boolean;
+}
+
+export interface JoinRoomResponse {
+  sessionStarted: boolean;
+  sessionId?: string;
+  playerCount: number;
+  players?: string[];
+  tier: number;
+  maxPlayers?: number;
+  isReady?: boolean;
+  isFull?: boolean;
 }
 
 export interface LeaderboardEntry {
@@ -57,9 +70,34 @@ export interface LeaderboardEntry {
   payoutUsd: number;
 }
 
+export interface AdminStats {
+  platform: {
+    totalUsers: number;
+    totalSpins: number;
+    totalWithdrawalsUsd: number;
+    totalDepositsUsd: number;
+  };
+  blockchain: {
+    hotWallet: { balanceUsd: number; balanceMatic: number } | null;
+    prizePool:  { balanceUsd: number; balanceMatic: number } | null;
+  };
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  username: string;
+  balance_usd: number;
+  total_spins: number;
+  total_wins: number;
+  is_banned: boolean;
+  kyc_verified: boolean;
+  created_at: string;
+}
+
 // ─── Core fetch wrapper ────────────────────────────────────────────────────
 
-async function apiFetch<T>(
+export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<ApiResponse<T>> {
@@ -90,7 +128,13 @@ async function apiFetch<T>(
 
 export const roomsApi = {
   getRooms: () =>
-    apiFetch<{ rooms: RoomInfo[] }>('/api/v1/games/rooms'),
+    apiFetch<{ rooms: RoomInfo[]; minPlayers: number; maxPlayers: number }>('/api/v1/games/rooms'),
+
+  joinRoom: (tier: number) =>
+    apiFetch<JoinRoomResponse>(`/api/v1/games/rooms/${tier}/join`, { method: 'POST' }),
+
+  leaveRoom: (tier: number) =>
+    apiFetch<{ playerCount: number; tier: number }>(`/api/v1/games/rooms/${tier}/leave`, { method: 'POST' }),
 };
 
 export const authApi = {
@@ -189,4 +233,36 @@ export const walletApi = {
       '/api/v1/wallet/check-deposit',
       { method: 'POST' },
     ),
+};
+
+// ─── Admin API ─────────────────────────────────────────────────────────────
+
+function adminFetch<T>(path: string, secret: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
+  return apiFetch<T>(path, {
+    ...options,
+    headers: { 'x-admin-secret': secret, ...(options.headers as Record<string, string> ?? {}) },
+  });
+}
+
+export const adminApi = {
+  getStats: (secret: string) =>
+    adminFetch<AdminStats>('/api/v1/admin/stats', secret),
+
+  getUsers: (secret: string, page = 1, search = '') =>
+    adminFetch<{ users: AdminUser[]; pagination: { total: number; totalPages: number; page: number } }>(
+      `/api/v1/admin/users?page=${page}&limit=25${search ? `&search=${encodeURIComponent(search)}` : ''}`,
+      secret,
+    ),
+
+  banUser: (secret: string, userId: string, banned: boolean) =>
+    adminFetch<{ message: string }>(`/api/v1/admin/users/${userId}/ban`, secret, {
+      method: 'POST',
+      body: JSON.stringify({ banned }),
+    }),
+
+  adjustBalance: (secret: string, userId: string, deltaUsd: number, note: string) =>
+    adminFetch<{ newBalance: number }>(`/api/v1/admin/users/${userId}/balance`, secret, {
+      method: 'POST',
+      body: JSON.stringify({ deltaUsd, note }),
+    }),
 };

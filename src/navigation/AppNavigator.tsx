@@ -5,6 +5,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, ActivityIndicator, View } from 'react-native';
 
 import { AuthScreen }            from '../screens/AuthScreen';
+import { LobbyScreen }           from '../screens/LobbyScreen';
+import { TrySpinScreen }         from '../screens/TrySpinScreen';
 import { RoomsScreen }           from '../screens/RoomsScreen';
 import { GameScreen }            from '../screens/GameScreen';
 import { WalletScreen }          from '../screens/WalletScreen';
@@ -12,15 +14,24 @@ import { HistoryScreen }         from '../screens/HistoryScreen';
 import { LeaderboardScreen }     from '../screens/LeaderboardScreen';
 import { AccountSettingsScreen } from '../screens/AccountSettingsScreen';
 import { FairnessScreen }        from '../screens/FairnessScreen';
+import { AdminDashboardScreen }  from '../screens/AdminDashboardScreen';
 import { useAuthStore }          from '../store/authStore';
 
 export type GameStackParamList = {
-  Rooms: undefined;
-  Game:  { tier: number };
+  Lobby:   undefined;
+  TrySpin: undefined;
+  Rooms:   undefined;
+  Game:    { tier: number };
+};
+
+export type RootStackParamList = {
+  Main:           undefined;
+  Auth:           undefined;
+  AdminDashboard: undefined;
 };
 
 const GameStack = createNativeStackNavigator<GameStackParamList>();
-const Stack = createNativeStackNavigator();
+const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab   = createBottomTabNavigator();
 
 function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
@@ -30,8 +41,10 @@ function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
 function GameStackNavigator() {
   return (
     <GameStack.Navigator screenOptions={{ headerShown: false }}>
-      <GameStack.Screen name="Rooms" component={RoomsScreen} />
-      <GameStack.Screen name="Game"  component={GameScreen} />
+      <GameStack.Screen name="Lobby"   component={LobbyScreen} />
+      <GameStack.Screen name="TrySpin" component={TrySpinScreen} />
+      <GameStack.Screen name="Rooms"   component={RoomsScreen} />
+      <GameStack.Screen name="Game"    component={GameScreen} />
     </GameStack.Navigator>
   );
 }
@@ -112,6 +125,7 @@ export function AppNavigator() {
         ) : (
           <Stack.Screen name="Auth" component={AuthScreen} />
         )}
+        <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -26,7 +26,9 @@ import { authRoutes } from './routes/auth';
 import { gameRoutes } from './routes/games';
 import { walletRoutes } from './routes/wallet';
 import { adminRoutes } from './routes/admin';
+import { registerAgentRoutes } from './routes/agentRoutes';
 import { registerGameSocket } from './socket/gameSocket';
+import { initializeAgentSystem } from './agents';
 
 // ─── Environment validation ───────────────────────────────────────────────────
 const REQUIRED_ENV = [
@@ -122,6 +124,7 @@ async function buildApp(): Promise<{
   await fastify.register(gameRoutes,   { prefix: '/api/v1/games' });
   await fastify.register(walletRoutes, { prefix: '/api/v1/wallet' });
   await fastify.register(adminRoutes,  { prefix: '/api/v1/admin' });
+  await fastify.register(registerAgentRoutes, { prefix: '/api/v1' });
 
   // ── Global error handler ────────────────────────────────────────────────────
   fastify.setErrorHandler((err, req, reply) => {
@@ -203,6 +206,14 @@ async function start(): Promise<void> {
 
   await fastify.listen({ port: PORT, host: HOST });
   console.log(`[boot] Server listening on ${HOST}:${PORT} (${process.env.NODE_ENV ?? 'development'})`);
+
+  try {
+    await initializeAgentSystem();
+    console.log('[boot] Agent system ✓');
+  } catch (err) {
+    console.error('[agents] Failed to initialize agent system:', err);
+    // Non-fatal — game still runs without background agents
+  }
 }
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────

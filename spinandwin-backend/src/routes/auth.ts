@@ -321,4 +321,29 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.status(200).send({ token });
     },
   );
+
+  // ── POST /api/v1/auth/push-token ─────────────────────────────────────────
+  // Registers an Expo push token for the authenticated user.
+  // Called by the mobile app on startup after requesting notification permissions.
+
+  fastify.post<{ Body: { token: string } }>(
+    '/push-token',
+    {
+      preHandler: [authenticate],
+      schema: {
+        body: {
+          type: 'object',
+          required: ['token'],
+          properties: { token: { type: 'string', minLength: 1, maxLength: 200 } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const uid = req.user.sub;
+      const { token } = req.body;
+      // Store for 60 days — refreshed on every app launch
+      await redis.set(Keys.pushToken(uid), token, { ex: 60 * 24 * 60 * 60 });
+      return reply.status(200).send({ ok: true });
+    },
+  );
 }

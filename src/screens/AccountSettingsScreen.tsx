@@ -8,9 +8,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { authApi } from '../services/api';
 import { firebaseChangePassword, firebaseResetPassword } from '../services/firebase';
 import { useAuthStore } from '../store/authStore';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/AppNavigator';
 
 export function AccountSettingsScreen() {
   const { user, updateUser, clearAuth } = useAuthStore();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   // ── Username ─────────────────────────────────────────────────────────────
   const [newUsername,     setNewUsername]     = useState('');
@@ -251,6 +255,7 @@ const styles = StyleSheet.create({
 
   btn:        { borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   btnPrimary: { backgroundColor: '#E94560' },
+  btnAdmin:   { backgroundColor: 'rgba(255,215,0,0.12)', borderWidth: 1, borderColor: '#FFD700' },
   btnDanger:  { backgroundColor: 'rgba(233,69,96,0.15)', borderWidth: 1, borderColor: '#E94560' },
   btnDisabled:{ opacity: 0.5 },
   btnText:    { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },

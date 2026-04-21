@@ -2,6 +2,7 @@ import { Server as SocketIOServer, Socket } from 'socket.io';
 import { createHmac } from 'crypto';
 import { redis, Keys } from '../config/redis';
 import { supabase } from '../config/supabase';
+import { sendExpoPush } from '../services/pushService';
 
 // ─── Event type definitions ────────────────────────────────────────────────
 
@@ -111,7 +112,7 @@ interface RoomRoundResultPayload {
 // ─── Room config ───────────────────────────────────────────────────────────
 
 const ROOM_TIERS = [5, 25, 50, 100, 200, 500, 1000, 5000, 10000];
-const MIN_PLAYERS_TO_PLAY = 5;
+const MIN_PLAYERS_TO_PLAY = 2;
 const ROUND_SPIN_TIMEOUT_MS = 60_000;   // 60s to spin after round starts
 const PLATFORM_FEE_PCT = 0.30;
 
@@ -564,6 +565,23 @@ async function startRound(tier: number, players: string[], io: GameIO): Promise<
     players: participantUsernames,
     deadlineMs,
   } as RoomRoundStartPayload);
+
+  // Push notification — fire and forget for players who may be backgrounded
+  (async () => {
+    try {
+      const tokens = await Promise.all(
+        eligible.map((u) => redis.get<string>(Keys.pushToken(u.id))),
+      );
+      const validTokens = tokens.filter((t): t is string => !!t);
+      if (validTokens.length > 0) {
+        await sendExpoPush(validTokens, {
+          title: `$${tier} Room — Round Starting!`,
+          body:  `${participantUsernames.length} players ready. You have 60s to spin!`,
+          data:  { tier, roundId },
+        });
+      }
+    } catch { /* non-fatal */ }
+  })();
 
   // Timeout: finalize round when time expires
   const timer = setTimeout(() => finalizeRound(tier, roundId, io), ROUND_SPIN_TIMEOUT_MS);

@@ -69,6 +69,8 @@ type ServerToClient = {
   'leaderboard:update': (p: LeaderboardEntry[]) => void;
   'chat:message':       (p: ChatPayload) => void;
   'room:update':        (p: RoomUpdatePayload) => void;
+  'room:round:start':   (p: RoomRoundStartPayload) => void;
+  'room:round:result':  (p: RoomRoundResultPayload) => void;
   'error':              (p: { message: string; code?: string }) => void;
 };
 
@@ -78,6 +80,7 @@ type ClientToServer = {
   'chat:message': (p: { message: string }) => void;
   'room:join':    (p: { tier: number }) => void;
   'room:leave':   () => void;
+  'room:spin':    (p: { tier: number; clientSeed: string }) => void;
 };
 
 // ─── Singleton socket instance ──────────────────────────────────────────────

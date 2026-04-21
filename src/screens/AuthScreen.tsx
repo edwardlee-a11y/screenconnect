@@ -20,8 +20,12 @@ import {
   firebaseResetPassword,
 } from '../services/firebase';
 import type { AuthUser } from '../store/authStore';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/AppNavigator';
 
 export function AuthScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { setAuth } = useAuthStore();
 
   const [mode,     setMode]     = useState<'login' | 'register'>('login');
@@ -188,6 +192,14 @@ export function AuthScreen() {
           <Text style={styles.disclaimer}>
             Play responsibly. For entertainment purposes only.
           </Text>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('AdminDashboard')}
+            activeOpacity={0.6}
+            style={styles.adminLink}
+          >
+            <Text style={styles.adminLinkText}>Admin</Text>
+          </TouchableOpacity>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </LinearGradient>
@@ -244,4 +256,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 16,
   },
+
+  adminLink:     { alignSelf: 'center', marginTop: 20, padding: 8 },
+  adminLinkText: { color: 'rgba(255,255,255,0.15)', fontSize: 11 },
 });

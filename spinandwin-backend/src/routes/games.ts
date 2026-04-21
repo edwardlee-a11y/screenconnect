@@ -1,77 +1,22 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { createHmac, randomBytes } from 'crypto';
 import { randomUUID } from 'crypto';
 import { supabase } from '../config/supabase';
 import { redis, Keys, TTL, acquireLock, releaseLock } from '../config/redis';
 import { authenticate, requireEmailVerified } from '../middleware/authenticate';
+import {
+  WHEEL,
+  MIN_WAGER_USD,
+  MAX_WAGER_USD,
+  ROOM_TIERS,
+  MIN_PLAYERS,
+  MAX_PLAYERS,
+  generateServerSeed,
+  hashServerSeed,
+  computeOutcome,
+  calcPayout,
+} from '../utils/gameLogic';
 
-// ─── Wheel configuration ───────────────────────────────────────────────────
-// 12 segments — index maps to outcome label and multiplier.
-// Total weighted RTP (return to player) ≈ 92% — adjust weights to tune.
-
-interface WheelSegment {
-  label: string;
-  multiplier: number;   // 0 = lose
-  weight: number;       // Higher = more likely (sum = 1000)
-}
-
-const WHEEL: WheelSegment[] = [
-  { label: 'LOSE',    multiplier: 0,    weight: 280 },
-  { label: 'LOSE',    multiplier: 0,    weight: 200 },
-  { label: '1.2x',    multiplier: 1.2,  weight: 150 },
-  { label: '1.5x',    multiplier: 1.5,  weight: 120 },
-  { label: 'LOSE',    multiplier: 0,    weight: 80  },
-  { label: '2x',      multiplier: 2,    weight: 60  },
-  { label: '1.2x',    multiplier: 1.2,  weight: 40  },
-  { label: '3x',      multiplier: 3,    weight: 30  },
-  { label: '2x',      multiplier: 2,    weight: 20  },
-  { label: '5x',      multiplier: 5,    weight: 12  },
-  { label: '10x',     multiplier: 10,   weight: 5   },
-  { label: 'JACKPOT', multiplier: 50,   weight: 3   },
-];
-
-const WHEEL_TOTAL_WEIGHT = WHEEL.reduce((sum, s) => sum + s.weight, 0); // 1000
-
-const MIN_WAGER_USD = 0.10;
-const MAX_WAGER_USD = 10000.00;
-
-const ROOM_TIERS = [5, 25, 50, 100, 200, 500, 1000, 5000, 10000];
-const MIN_PLAYERS_TO_PLAY = 5;
-
-// ─── Provably fair RNG ─────────────────────────────────────────────────────
-
-function generateServerSeed(): string {
-  return randomBytes(32).toString('hex');
-}
-
-function hashServerSeed(seed: string): string {
-  return createHmac('sha256', seed).digest('hex');
-}
-
-/**
- * Deterministic spin outcome from server seed + client seed + nonce.
- * The client can verify this after the server seed is revealed.
- */
-function computeOutcome(
-  serverSeed: string,
-  clientSeed: string,
-  nonce: number,
-): number {
-  const hmac = createHmac('sha256', serverSeed)
-    .update(`${clientSeed}:${nonce}`)
-    .digest('hex');
-
-  // Use first 8 hex chars → number 0–4294967295, map to 0–999
-  const roll = parseInt(hmac.slice(0, 8), 16) % WHEEL_TOTAL_WEIGHT;
-
-  // Walk wheel weights to find segment index
-  let cumulative = 0;
-  for (let i = 0; i < WHEEL.length; i++) {
-    cumulative += WHEEL[i].weight;
-    if (roll < cumulative) return i;
-  }
-  return WHEEL.length - 1;
-}
+const MIN_PLAYERS_TO_PLAY = MIN_PLAYERS;
 
 // ─── Route plugin ──────────────────────────────────────────────────────────
 
@@ -87,12 +32,96 @@ export async function gameRoutes(fastify: FastifyInstance): Promise<void> {
         return {
           tier,
           playerCount: players.length,
+          maxPlayers: MAX_PLAYERS,
           isReady: players.length >= MIN_PLAYERS_TO_PLAY,
+          isFull: players.length >= MAX_PLAYERS,
         };
       }),
     );
-    return reply.send({ rooms });
+    return reply.send({ rooms, minPlayers: MIN_PLAYERS_TO_PLAY, maxPlayers: MAX_PLAYERS });
   });
+
+  // ── POST /api/v1/games/rooms/:tier/join ───────────────────────────────────
+  // Adds authenticated user to a room. Auto-starts a session when MAX_PLAYERS reached.
+
+  fastify.post<{ Params: { tier: string } }>(
+    '/rooms/:tier/join',
+    { preHandler: [authenticate, requireEmailVerified] },
+    async (req: FastifyRequest<{ Params: { tier: string } }>, reply: FastifyReply) => {
+      const uid  = req.user.sub;
+      const tier = parseInt(req.params.tier, 10);
+
+      if (!ROOM_TIERS.includes(tier)) {
+        return reply.status(400).send({ statusCode: 400, error: 'Bad Request', message: 'Invalid room tier.' });
+      }
+
+      const roomKey = Keys.roomPlayers(tier);
+      await redis.sadd(roomKey, uid);
+      await redis.expire(roomKey, TTL.SERVER_SEED);
+
+      const players = await redis.smembers<string[]>(roomKey);
+      const playerCount = players.length;
+      const isReady = playerCount >= MIN_PLAYERS_TO_PLAY;
+      const isFull  = playerCount >= MAX_PLAYERS;
+
+      // When room is full, auto-start a session and clear it for the next batch
+      if (isFull) {
+        const sessionId = randomUUID();
+        await supabase.from('game_sessions').insert({
+          id: sessionId,
+          status: 'active',
+          room_tier: tier,
+          player_ids: players,
+          total_spins: 0,
+          total_wagered_usd: 0,
+          total_payout_usd: 0,
+        });
+        // Clear room so next group of players can join
+        await redis.del(roomKey);
+
+        // Broadcast session start via pub/sub
+        await redis.publish(`room:${tier}:session`, JSON.stringify({ sessionId, players, tier }));
+
+        return reply.status(201).send({
+          sessionStarted: true,
+          sessionId,
+          playerCount,
+          players,
+          tier,
+        });
+      }
+
+      return reply.status(200).send({
+        sessionStarted: false,
+        playerCount,
+        maxPlayers: MAX_PLAYERS,
+        isReady,
+        isFull,
+        tier,
+      });
+    },
+  );
+
+  // ── POST /api/v1/games/rooms/:tier/leave ──────────────────────────────────
+  // Removes user from a room.
+
+  fastify.post<{ Params: { tier: string } }>(
+    '/rooms/:tier/leave',
+    { preHandler: [authenticate] },
+    async (req: FastifyRequest<{ Params: { tier: string } }>, reply: FastifyReply) => {
+      const uid  = req.user.sub;
+      const tier = parseInt(req.params.tier, 10);
+
+      if (!ROOM_TIERS.includes(tier)) {
+        return reply.status(400).send({ statusCode: 400, error: 'Bad Request', message: 'Invalid room tier.' });
+      }
+
+      await redis.srem(Keys.roomPlayers(tier), uid);
+      const players = await redis.smembers<string[]>(Keys.roomPlayers(tier));
+
+      return reply.status(200).send({ playerCount: players.length, tier });
+    },
+  );
 
   // ── GET /api/v1/games/wheel-config ────────────────────────────────────────
   // Returns the public wheel layout — no auth required.
@@ -242,7 +271,7 @@ export async function gameRoutes(fastify: FastifyInstance): Promise<void> {
         const nonce = user.total_spins + 1;
         const outcomeIndex = computeOutcome(serverSeed, clientSeed, nonce);
         const segment = WHEEL[outcomeIndex];
-        const payoutUsd = parseFloat((wagerUsd * segment.multiplier).toFixed(2));
+        const payoutUsd = calcPayout(wagerUsd, outcomeIndex);
         const netChange = parseFloat((payoutUsd - wagerUsd).toFixed(2));
 
         // 5. Update user balance + stats
