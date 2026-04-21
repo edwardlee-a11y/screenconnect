@@ -59,59 +59,61 @@ export function TrySpinScreen() {
 
   const [virtualBalance, setVirtualBalance] = useState(STARTING_BALANCE);
   const [wager,          setWager]          = useState(WAGER_PRESETS[0]);
-  const [isSpinning,     setIsSpinning]     = useState(false);
   const [targetIndex,    setTargetIndex]    = useState<number | null>(null);
   const [roundResult,    setRoundResult]    = useState<RoundResult | null>(null);
   const [showResult,     setShowResult]     = useState(false);
-  const [botSpinning,    setBotSpinning]    = useState(false);
-  const botTargetRef = useRef<number>(0);
+  const [spinPhase,      setSpinPhase]      = useState<'idle' | 'player' | 'bot'>('idle');
 
   const pendingResultRef = useRef<RoundResult | null>(null);
+  const botTargetRef     = useRef<number>(0);
+  const phaseRef         = useRef<'player' | 'bot'>('player');
 
   const handleSpin = useCallback(() => {
-    if (isSpinning) return;
+    if (spinPhase !== 'idle') return;
 
     const effectiveWager = Math.min(wager, virtualBalance);
-    if (effectiveWager <= 0) {
-      setVirtualBalance(STARTING_BALANCE);
-      return;
-    }
+    if (effectiveWager <= 0) { setVirtualBalance(STARTING_BALANCE); return; }
 
     const playerIdx = pickWeightedRandom();
     const botIdx    = pickWeightedRandom();
-
     const playerPayout = parseFloat((effectiveWager * LOCAL_WHEEL[playerIdx].multiplier).toFixed(2));
     const botPayout    = parseFloat((effectiveWager * LOCAL_WHEEL[botIdx].multiplier).toFixed(2));
 
     pendingResultRef.current = { playerIdx, botIdx, playerPayout, botPayout, wager: effectiveWager };
     botTargetRef.current = botIdx;
+    phaseRef.current = 'player';
 
-    setIsSpinning(true);
-    setTargetIndex(playerIdx);
     setRoundResult(null);
     setShowResult(false);
+    setSpinPhase('player');
+    setTargetIndex(playerIdx);
     Haptics.spinStart();
     Sounds.spin();
-  }, [isSpinning, wager, virtualBalance]);
+  }, [spinPhase, wager, virtualBalance]);
 
   const onSpinComplete = useCallback(() => {
-    setIsSpinning(false);
     setTargetIndex(null);
-    setBotSpinning(true);
 
-    // Short pause then reveal bot result + show modal
-    setTimeout(() => {
-      setBotSpinning(false);
+    if (phaseRef.current === 'player') {
+      // Player done — now spin for the bot
+      setSpinPhase('bot');
+      setTimeout(() => {
+        phaseRef.current = 'bot';
+        setTargetIndex(botTargetRef.current);
+        Haptics.spinStart();
+        Sounds.spin();
+      }, 600);
+    } else {
+      // Bot done — show result
+      setSpinPhase('idle');
       const result = pendingResultRef.current;
       if (!result) return;
 
       const netChange = result.playerPayout - result.wager;
       setVirtualBalance(prev => {
         const next = prev + netChange;
-        // Auto-reset if broke
         return next < WAGER_PRESETS[0] ? STARTING_BALANCE : Math.round(next * 100) / 100;
       });
-
       setRoundResult(result);
       setShowResult(true);
 
@@ -122,7 +124,7 @@ export function TrySpinScreen() {
       } else {
         Haptics.lose(); Sounds.lose();
       }
-    }, 1200);
+    }
   }, []);
 
   const handleClose = useCallback(() => {
@@ -130,7 +132,7 @@ export function TrySpinScreen() {
     setRoundResult(null);
   }, []);
 
-  const spinDisabled = isSpinning || botSpinning;
+  const spinDisabled = spinPhase !== 'idle';
 
   return (
     <LinearGradient colors={['#0D0D1A', '#16213E', '#0D0D1A']} style={styles.gradient}>
@@ -153,6 +155,20 @@ export function TrySpinScreen() {
             <Text style={styles.modeBadgeText}>🎯 FREE PLAY — vs Bot · No real money</Text>
           </View>
 
+          {/* Spin phase label */}
+          <View style={styles.phaseRow}>
+            {spinPhase === 'player' && (
+              <View style={[styles.phaseBadge, styles.phaseBadgeYou]}>
+                <Text style={styles.phaseBadgeText}>👤 YOUR SPIN</Text>
+              </View>
+            )}
+            {spinPhase === 'bot' && (
+              <View style={[styles.phaseBadge, styles.phaseBadgeBot]}>
+                <Text style={styles.phaseBadgeText}>🤖 BOT SPINNING...</Text>
+              </View>
+            )}
+          </View>
+
           {/* Wheel */}
           <View style={styles.wheelContainer}>
             <SpinWheel
@@ -161,13 +177,6 @@ export function TrySpinScreen() {
               onSpinComplete={onSpinComplete}
             />
           </View>
-
-          {/* Bot spinner indicator */}
-          {botSpinning && (
-            <View style={styles.botRow}>
-              <Text style={styles.botText}>🤖 Bot is spinning...</Text>
-            </View>
-          )}
 
           {/* Wager presets */}
           <Text style={styles.wagerLabel}>Select Wager (Play Credits)</Text>
@@ -198,8 +207,8 @@ export function TrySpinScreen() {
               style={styles.spinBtnGradient}
             >
               <Text style={styles.spinBtnText}>
-                {isSpinning  ? 'Spinning...'
-                : botSpinning ? '🤖 Bot Spinning...'
+                {spinPhase === 'player' ? 'Spinning...'
+                : spinPhase === 'bot'   ? '🤖 Bot Spinning...'
                 : `SPIN FREE — ${wager} Credits`}
               </Text>
             </LinearGradient>
@@ -380,8 +389,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  botRow: { alignItems: 'center', marginBottom: 10 },
-  botText: { color: 'rgba(255,255,255,0.5)', fontSize: 14 },
+  phaseRow: { alignItems: 'center', marginBottom: 8, minHeight: 32 },
+  phaseBadge: {
+    paddingHorizontal: 16, paddingVertical: 6,
+    borderRadius: 20, borderWidth: 1,
+  },
+  phaseBadgeYou: {
+    backgroundColor: 'rgba(46,213,115,0.12)',
+    borderColor: 'rgba(46,213,115,0.4)',
+  },
+  phaseBadgeBot: {
+    backgroundColor: 'rgba(233,69,96,0.12)',
+    borderColor: 'rgba(233,69,96,0.4)',
+  },
+  phaseBadgeText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800', letterSpacing: 1 },
 
   wagerLabel: {
     color: 'rgba(255,255,255,0.5)',
