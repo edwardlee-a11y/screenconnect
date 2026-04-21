@@ -72,17 +72,39 @@ export function AdminDashboardScreen() {
     await load(activeSecret, next, search);
   };
 
-  const handleBan = (user: AdminUser) => {
-    const action = user.is_banned ? 'Unban' : 'Ban';
-    Alert.alert(`${action} ${user.username}?`, undefined, [
+  const handleRowPress = (user: AdminUser) => {
+    const banLabel = user.is_banned ? 'Unban' : 'Ban';
+    Alert.alert(user.username, user.email, [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: action,
+        text: banLabel,
         style: user.is_banned ? 'default' : 'destructive',
         onPress: async () => {
           const { error } = await adminApi.banUser(activeSecret, user.id, !user.is_banned);
           if (error) { Alert.alert('Error', error); return; }
           await load(activeSecret, page, search);
+        },
+      },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          Alert.alert(
+            'Delete User',
+            `Permanently delete "${user.username}"? This cannot be undone.`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: async () => {
+                  const { error } = await adminApi.deleteUser(activeSecret, user.id);
+                  if (error) { Alert.alert('Error', error); return; }
+                  await load(activeSecret, page, search);
+                },
+              },
+            ],
+          );
         },
       },
     ]);
@@ -186,7 +208,7 @@ export function AdminDashboardScreen() {
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[styles.tableRow, item.is_banned && styles.tableRowBanned]}
-              onLongPress={() => handleBan(item)}
+              onLongPress={() => handleRowPress(item)}
               activeOpacity={0.7}
             >
               <View style={styles.colUser}>

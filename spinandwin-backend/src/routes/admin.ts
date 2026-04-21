@@ -215,6 +215,39 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
     },
   );
 
+  // ── DELETE /api/v1/admin/users/:id ───────────────────────────────────────
+  // Permanently delete a user and their data.
+
+  fastify.delete<{ Params: { id: string } }>(
+    '/users/:id',
+    { preHandler: [adminAuth] },
+    async (req, reply) => {
+      const { id } = req.params;
+
+      const { data: user, error: fetchErr } = await supabase
+        .from('users')
+        .select('username, email')
+        .eq('id', id)
+        .single();
+
+      if (fetchErr || !user) {
+        return reply.status(404).send({ statusCode: 404, error: 'Not Found', message: 'User not found.' });
+      }
+
+      // Delete user record (cascade deletes related rows if FK set up)
+      const { error } = await supabase.from('users').delete().eq('id', id);
+
+      if (error) {
+        return reply.status(500).send({ statusCode: 500, error: 'Internal Server Error', message: error.message });
+      }
+
+      // Invalidate session
+      await redis.del(Keys.userSession(id));
+
+      return reply.send({ message: `User ${user.username} deleted.`, userId: id });
+    },
+  );
+
   // ── POST /api/v1/admin/users/:id/balance ─────────────────────────────────
   // Adjust a user's in-app USD balance (deposits, bonuses, manual corrections).
 

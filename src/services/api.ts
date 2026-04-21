@@ -260,6 +260,11 @@ export const adminApi = {
       body: JSON.stringify({ banned }),
     }),
 
+  deleteUser: (secret: string, userId: string) =>
+    adminFetch<{ message: string }>(`/api/v1/admin/users/${userId}`, secret, {
+      method: 'DELETE',
+    }),
+
   adjustBalance: (secret: string, userId: string, deltaUsd: number, note: string) =>
     adminFetch<{ newBalance: number }>(`/api/v1/admin/users/${userId}/balance`, secret, {
       method: 'POST',
