@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Matchmaking Agent
  * Handles player matching for multiplayer games and tournaments

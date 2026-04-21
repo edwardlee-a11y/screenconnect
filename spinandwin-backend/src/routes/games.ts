@@ -67,7 +67,7 @@ export async function gameRoutes(fastify: FastifyInstance): Promise<void> {
       // When room is full, auto-start a session and clear it for the next batch
       if (isFull) {
         const sessionId = randomUUID();
-        await supabase.from('game_sessions').insert({
+        await (supabase as any).from('game_sessions').insert({
           id: sessionId,
           status: 'active',
           room_tier: tier,

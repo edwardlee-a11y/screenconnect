@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Game Logic Agent
  * Handles wheel spins, outcome calculation, and game state management

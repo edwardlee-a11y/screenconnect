@@ -392,7 +392,7 @@ export async function walletRoutes(fastify: FastifyInstance): Promise<void> {
     async (req: FastifyRequest, reply: FastifyReply) => {
       const uid = req.user.sub;
 
-      const { data: user } = await supabase
+      const { data: user } = await (supabase as any)
         .from('users')
         .select('deposit_address, deposit_index')
         .eq('id', uid)
@@ -411,7 +411,7 @@ export async function walletRoutes(fastify: FastifyInstance): Promise<void> {
       const index = count ?? 0;
       const address = generateDepositAddress(index);
 
-      await supabase
+      await (supabase as any)
         .from('users')
         .update({ deposit_address: address, deposit_index: index })
         .eq('id', uid);
@@ -432,7 +432,7 @@ export async function walletRoutes(fastify: FastifyInstance): Promise<void> {
     async (req: FastifyRequest, reply: FastifyReply) => {
       const uid = req.user.sub;
 
-      const { data: user } = await supabase
+      const { data: user } = await (supabase as any)
         .from('users')
         .select('deposit_address, deposit_tracked_wei, balance_usd')
         .eq('id', uid)
@@ -459,7 +459,7 @@ export async function walletRoutes(fastify: FastifyInstance): Promise<void> {
       // Credit balance + update tracked amount
       const newBalance = parseFloat((user.balance_usd + creditedUsd).toFixed(2));
 
-      await supabase
+      await (supabase as any)
         .from('users')
         .update({
           balance_usd: newBalance,

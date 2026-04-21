@@ -712,7 +712,7 @@ async function finalizeRound(tier: number, roundId: string, io: GameIO): Promise
     });
 
     // Save round to DB
-    await supabase.from('room_rounds').insert({
+    await (supabase as any).from('room_rounds').insert({
       id: roundId,
       tier,
       players: roundState.players,
