@@ -80,7 +80,7 @@ export function LobbyScreen() {
                     <Text style={styles.freeBadgeText}>FREE</Text>
                   </View>
                   <Text style={styles.tryCardTitle}>Try Spin</Text>
-                  <Text style={styles.tryCardSub}>Play vs a bot · No real money · Practice the wheel</Text>
+                  <Text style={styles.tryCardSub}>Play vs Lisa · No real money · Practice the wheel</Text>
                 </View>
                 <Text style={styles.arrow}>→</Text>
               </LinearGradient>

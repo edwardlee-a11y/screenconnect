@@ -156,7 +156,7 @@ export function TrySpinScreen() {
 
           {/* Mode label */}
           <View style={styles.modeBadge}>
-            <Text style={styles.modeBadgeText}>🎯 FREE PLAY — vs Bot · No real money</Text>
+            <Text style={styles.modeBadgeText}>🎯 FREE PLAY — vs Lisa · No real money</Text>
           </View>
 
           {/* Spin phase label */}
@@ -168,7 +168,7 @@ export function TrySpinScreen() {
             )}
             {spinPhase === 'bot' && (
               <View style={[styles.phaseBadge, styles.phaseBadgeBot]}>
-                <Text style={styles.phaseBadgeText}>🤖 BOT SPINNING...</Text>
+                <Text style={styles.phaseBadgeText}>💃 LISA SPINNING...</Text>
               </View>
             )}
           </View>
@@ -212,7 +212,7 @@ export function TrySpinScreen() {
             >
               <Text style={styles.spinBtnText}>
                 {spinPhase === 'player' ? 'Spinning...'
-                : spinPhase === 'bot'   ? '🤖 Bot Spinning...'
+                : spinPhase === 'bot'   ? '💃 Lisa Spinning...'
                 : `SPIN FREE — ${wager} Credits`}
               </Text>
             </LinearGradient>
@@ -260,8 +260,8 @@ function TrySpinResultModal({ visible, result, onClose }: TrySpinResultModalProp
   const netChange    = playerWon ? result.wager : tie ? 0 : -result.wager;
 
   const headline = tie       ? "🤝 It's a Tie!"
-                 : playerWon ? '🏆 You Beat the Bot!'
-                 :             '🤖 Bot Wins This Round';
+                 : playerWon ? '🏆 You Beat Lisa!'
+                 :             '💃 Lisa Wins This Round';
 
   const headlineColor = tie       ? '#FFD700'
                       : playerWon ? '#2ED573'
@@ -285,7 +285,7 @@ function TrySpinResultModal({ visible, result, onClose }: TrySpinResultModalProp
             />
             <Text style={modalStyles.vsText}>VS</Text>
             <ResultSide
-              label="Bot"
+              label="Lisa"
               emoji="🤖"
               outcome={botSeg.label}
               payout={result.botPayout}
