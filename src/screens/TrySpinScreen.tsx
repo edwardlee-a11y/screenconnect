@@ -214,15 +214,6 @@ export function TrySpinScreen() {
             </LinearGradient>
           </TouchableOpacity>
 
-          {/* Odds reference */}
-          <View style={styles.oddsGrid}>
-            {LOCAL_WHEEL.filter(s => s.multiplier > 0).map((seg) => (
-              <View key={seg.index} style={styles.oddsItem}>
-                <Text style={styles.oddsLabel}>{seg.label}</Text>
-                <Text style={styles.oddsChance}>{((seg.weight / TOTAL_WEIGHT) * 100).toFixed(1)}%</Text>
-              </View>
-            ))}
-          </View>
 
         </ScrollView>
       </SafeAreaView>

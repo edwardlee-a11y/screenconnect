@@ -323,14 +323,6 @@ export function GameScreen() {
             </LinearGradient>
           </TouchableOpacity>
 
-          {/* Odds reference */}
-          <View style={styles.oddsGrid}>
-            {wheelSegments.filter(s => s.multiplier > 0).map((seg) => (
-              <View key={seg.index} style={styles.oddsItem}>
-                <Text style={styles.oddsLabel}>{seg.label}</Text>
-              </View>
-            ))}
-          </View>
         </ScrollView>
 
         <ChatPanel />
