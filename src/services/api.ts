@@ -278,4 +278,13 @@ export const adminApi = {
       secret,
       { method: 'POST', body: JSON.stringify({ walletAddress, amountUsd }) },
     ),
+
+  getWithdrawalConfig: (secret: string) =>
+    adminFetch<{ min: number; max: number }>('/api/v1/admin/withdrawal-config', secret),
+
+  setWithdrawalConfig: (secret: string, min: number, max: number) =>
+    adminFetch<{ min: number; max: number; message: string }>('/api/v1/admin/withdrawal-config', secret, {
+      method: 'POST',
+      body: JSON.stringify({ min, max }),
+    }),
 };

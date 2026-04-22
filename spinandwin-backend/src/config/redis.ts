@@ -64,6 +64,9 @@ export const Keys = {
 
   // Push notifications — Expo push token per user
   pushToken: (uid: string) => `push:token:${uid}`,
+
+  // Platform config
+  withdrawalConfig: () => 'config:withdrawal',
 } as const;
 
 // ─── Helpers ───────────────────────────────────────────────────────────────

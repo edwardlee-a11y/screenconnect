@@ -17,9 +17,17 @@ import {
 import { sendWithdrawalConfirmationEmail } from '../services/emailService';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
-const MIN_WITHDRAWAL_USD = 1.00;
-const MAX_WITHDRAWAL_USD = 500.00;
+const DEFAULT_MIN_WITHDRAWAL_USD = 1.00;
+const DEFAULT_MAX_WITHDRAWAL_USD = 500.00;
 const WITHDRAWAL_FEE_PERCENT = 2; // 2% fee on withdrawals
+
+async function getWithdrawalLimits(): Promise<{ min: number; max: number }> {
+  const config = await redis.get<{ min: number; max: number }>(Keys.withdrawalConfig());
+  return {
+    min: config?.min ?? DEFAULT_MIN_WITHDRAWAL_USD,
+    max: config?.max ?? DEFAULT_MAX_WITHDRAWAL_USD,
+  };
+}
 
 // ─── Route plugin ──────────────────────────────────────────────────────────
 
@@ -208,11 +216,7 @@ export async function walletRoutes(fastify: FastifyInstance): Promise<void> {
           type: 'object',
           required: ['amountUsd'],
           properties: {
-            amountUsd: {
-              type: 'number',
-              minimum: MIN_WITHDRAWAL_USD,
-              maximum: MAX_WITHDRAWAL_USD,
-            },
+            amountUsd: { type: 'number', minimum: 0.01 },
           },
         },
       },
@@ -223,6 +227,17 @@ export async function walletRoutes(fastify: FastifyInstance): Promise<void> {
     ) => {
       const { amountUsd } = req.body;
       const uid = req.user.sub;
+
+      // Read live limits from Redis (admin-configurable)
+      const limits = await getWithdrawalLimits();
+
+      if (amountUsd < limits.min || amountUsd > limits.max) {
+        return reply.status(400).send({
+          statusCode: 400,
+          error: 'Bad Request',
+          message: `Withdrawal must be between $${limits.min.toFixed(2)} and $${limits.max.toFixed(2)}.`,
+        });
+      }
 
       // Fetch user
       const { data: user } = await supabase

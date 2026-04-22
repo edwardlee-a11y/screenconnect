@@ -24,11 +24,15 @@ export function AdminDashboardScreen() {
   const [revenueWallet,  setRevenueWallet]  = useState('');
   const [revenueAmount,  setRevenueAmount]  = useState('');
   const [withdrawing,    setWithdrawing]    = useState(false);
+  const [limitMin,       setLimitMin]       = useState('');
+  const [limitMax,       setLimitMax]       = useState('');
+  const [savingLimits,   setSavingLimits]   = useState(false);
 
   const load = useCallback(async (sec: string, pg: number, q: string) => {
-    const [statsRes, usersRes] = await Promise.all([
+    const [statsRes, usersRes, configRes] = await Promise.all([
       adminApi.getStats(sec),
       adminApi.getUsers(sec, pg, q),
+      adminApi.getWithdrawalConfig(sec),
     ]);
 
     if (statsRes.error || usersRes.error) {
@@ -41,6 +45,10 @@ export function AdminDashboardScreen() {
       setUsers(usersRes.data.users);
       setTotalPages(usersRes.data.pagination.totalPages);
       setTotalUsers(usersRes.data.pagination.total);
+    }
+    if (configRes.data) {
+      setLimitMin(configRes.data.min.toString());
+      setLimitMax(configRes.data.max.toString());
     }
     return true;
   }, []);
@@ -115,6 +123,19 @@ export function AdminDashboardScreen() {
         },
       ],
     );
+  };
+
+  const handleSaveLimits = async () => {
+    const min = parseFloat(limitMin);
+    const max = parseFloat(limitMax);
+    if (isNaN(min) || min < 0.01) { Alert.alert('Invalid', 'Minimum must be at least $0.01'); return; }
+    if (isNaN(max) || max < 1)    { Alert.alert('Invalid', 'Maximum must be at least $1.00'); return; }
+    if (min >= max)               { Alert.alert('Invalid', 'Minimum must be less than maximum'); return; }
+    setSavingLimits(true);
+    const { error } = await adminApi.setWithdrawalConfig(activeSecret, min, max);
+    setSavingLimits(false);
+    if (error) { Alert.alert('Error', error); return; }
+    Alert.alert('Saved', `Withdrawal limits updated: $${min.toFixed(2)} – $${max.toFixed(2)}`);
   };
 
   const handleRowPress = (user: AdminUser) => {
@@ -265,6 +286,44 @@ export function AdminDashboardScreen() {
                   </View>
                 </>
               )}
+
+              {/* Withdrawal limits */}
+              <View style={styles.limitsBox}>
+                <Text style={styles.limitsTitle}>Player Withdrawal Limits</Text>
+                <View style={styles.limitsRow}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={styles.limitsLabel}>Min ($)</Text>
+                    <TextInput
+                      style={styles.limitsInput}
+                      value={limitMin}
+                      onChangeText={setLimitMin}
+                      keyboardType="decimal-pad"
+                      placeholder="1.00"
+                      placeholderTextColor="rgba(255,255,255,0.3)"
+                    />
+                  </View>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={styles.limitsLabel}>Max ($)</Text>
+                    <TextInput
+                      style={styles.limitsInput}
+                      value={limitMax}
+                      onChangeText={setLimitMax}
+                      keyboardType="decimal-pad"
+                      placeholder="500.00"
+                      placeholderTextColor="rgba(255,255,255,0.3)"
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.limitsBtn, savingLimits && styles.btnDisabled]}
+                    onPress={handleSaveLimits}
+                    disabled={savingLimits}
+                  >
+                    {savingLimits
+                      ? <ActivityIndicator color="#0D0D1A" size="small" />
+                      : <Text style={styles.limitsBtnText}>Save</Text>}
+                  </TouchableOpacity>
+                </View>
+              </View>
 
               {/* Search + count */}
               <View style={styles.searchRow}>
@@ -505,4 +564,31 @@ const styles = StyleSheet.create({
   revenueBtn:    { backgroundColor: '#FF6B35', borderRadius: 10, paddingHorizontal: 18, paddingVertical: 11, alignItems: 'center' },
   revenueBtnText:{ color: '#0D0D1A', fontWeight: '800', fontSize: 14 },
   btnDisabled:   { opacity: 0.4 },
+
+  // ── Withdrawal limits ───────────────────────────────────────────────────
+  limitsBox: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+    backgroundColor: 'rgba(0,212,255,0.06)',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,212,255,0.2)',
+  },
+  limitsTitle: { color: '#00D4FF', fontSize: 14, fontWeight: '800', marginBottom: 12 },
+  limitsRow:   { flexDirection: 'row', alignItems: 'flex-end' },
+  limitsLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 11, marginBottom: 4 },
+  limitsInput: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 10,
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  limitsBtn:     { backgroundColor: '#00D4FF', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 11, alignItems: 'center', marginTop: 18 },
+  limitsBtnText: { color: '#0D0D1A', fontWeight: '800', fontSize: 14 },
 });

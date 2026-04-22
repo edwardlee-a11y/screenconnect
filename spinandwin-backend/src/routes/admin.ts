@@ -351,6 +351,53 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
     },
   );
 
+  // ── GET /api/v1/admin/withdrawal-config ──────────────────────────────────
+  // Returns current player withdrawal min/max limits.
+
+  fastify.get(
+    '/withdrawal-config',
+    { preHandler: [adminAuth] },
+    async (_req, reply) => {
+      const config = await redis.get<{ min: number; max: number }>(Keys.withdrawalConfig());
+      return reply.send({
+        min: config?.min ?? 1.00,
+        max: config?.max ?? 500.00,
+      });
+    },
+  );
+
+  // ── POST /api/v1/admin/withdrawal-config ──────────────────────────────────
+  // Update player withdrawal min/max limits (stored in Redis, applied instantly).
+
+  fastify.post<{ Body: { min: number; max: number } }>(
+    '/withdrawal-config',
+    {
+      preHandler: [adminAuth],
+      schema: {
+        body: {
+          type: 'object',
+          required: ['min', 'max'],
+          properties: {
+            min: { type: 'number', minimum: 0.01 },
+            max: { type: 'number', minimum: 1 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { min, max } = req.body;
+      if (min >= max) {
+        return reply.status(400).send({
+          statusCode: 400,
+          error: 'Bad Request',
+          message: 'min must be less than max.',
+        });
+      }
+      await redis.set(Keys.withdrawalConfig(), { min, max });
+      return reply.send({ min, max, message: 'Withdrawal limits updated.' });
+    },
+  );
+
   // ── POST /api/v1/admin/leaderboard/reset ─────────────────────────────────
   // Manually reset the daily leaderboard in Redis.
 
