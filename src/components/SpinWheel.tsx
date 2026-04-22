@@ -50,9 +50,10 @@ export function SpinWheel({ segments, targetIndex, onSpinComplete }: SpinWheelPr
   useEffect(() => {
     if (targetIndex === null || segments.length === 0) return;
 
-    // Calculate the exact angle for the target segment to stop at the pointer (top)
+    // Calculate the exact angle for the target segment CENTER to stop at the pointer (top)
     const segmentAngleDeg = 360 / SEGMENT_COUNT;
-    const targetAngleDeg  = targetIndex * segmentAngleDeg;
+    // Add half-segment offset so pointer lands on the CENTER, not the edge
+    const targetAngleDeg  = targetIndex * segmentAngleDeg + segmentAngleDeg / 2;
 
     // Spin at least 5 full rotations + land on target (pointer at top = 270°)
     const spinRotations   = 5 * 360;
