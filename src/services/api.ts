@@ -76,6 +76,7 @@ export interface AdminStats {
     totalSpins: number;
     totalWithdrawalsUsd: number;
     totalDepositsUsd: number;
+    totalPlatformFeeUsd: number;
   };
   blockchain: {
     hotWallet: { balanceUsd: number; balanceMatic: number } | null;
@@ -270,4 +271,11 @@ export const adminApi = {
       method: 'POST',
       body: JSON.stringify({ deltaUsd, note }),
     }),
+
+  withdrawRevenue: (secret: string, walletAddress: string, amountUsd: number) =>
+    adminFetch<{ txHash: string; amountUsd: number; walletAddress: string; polygonscanUrl: string }>(
+      '/api/v1/admin/withdraw-revenue',
+      secret,
+      { method: 'POST', body: JSON.stringify({ walletAddress, amountUsd }) },
+    ),
 };

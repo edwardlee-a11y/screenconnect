@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  FlatList, ActivityIndicator, Alert, ScrollView, RefreshControl,
+  FlatList, ActivityIndicator, Alert, ScrollView, RefreshControl, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -10,17 +10,20 @@ import { adminApi, type AdminStats, type AdminUser } from '../services/api';
 export function AdminDashboardScreen() {
   const navigation = useNavigation();
 
-  const [secret,       setSecret]       = useState('');
-  const [authed,       setAuthed]        = useState(false);
-  const [loading,      setLoading]       = useState(false);
-  const [refreshing,   setRefreshing]    = useState(false);
-  const [stats,        setStats]         = useState<AdminStats | null>(null);
-  const [users,        setUsers]         = useState<AdminUser[]>([]);
-  const [search,       setSearch]        = useState('');
-  const [page,         setPage]          = useState(1);
-  const [totalPages,   setTotalPages]    = useState(1);
-  const [totalUsers,   setTotalUsers]    = useState(0);
-  const [activeSecret, setActiveSecret] = useState('');
+  const [secret,         setSecret]         = useState('');
+  const [authed,         setAuthed]          = useState(false);
+  const [loading,        setLoading]         = useState(false);
+  const [refreshing,     setRefreshing]      = useState(false);
+  const [stats,          setStats]           = useState<AdminStats | null>(null);
+  const [users,          setUsers]           = useState<AdminUser[]>([]);
+  const [search,         setSearch]          = useState('');
+  const [page,           setPage]            = useState(1);
+  const [totalPages,     setTotalPages]      = useState(1);
+  const [totalUsers,     setTotalUsers]      = useState(0);
+  const [activeSecret,   setActiveSecret]   = useState('');
+  const [revenueWallet,  setRevenueWallet]  = useState('');
+  const [revenueAmount,  setRevenueAmount]  = useState('');
+  const [withdrawing,    setWithdrawing]    = useState(false);
 
   const load = useCallback(async (sec: string, pg: number, q: string) => {
     const [statsRes, usersRes] = await Promise.all([
@@ -70,6 +73,48 @@ export function AdminDashboardScreen() {
   const handlePage = async (next: number) => {
     setPage(next);
     await load(activeSecret, next, search);
+  };
+
+  const handleWithdrawRevenue = () => {
+    const amount = parseFloat(revenueAmount);
+    const wallet = revenueWallet.trim();
+    if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+      Alert.alert('Invalid Address', 'Enter a valid 0x wallet address.');
+      return;
+    }
+    if (isNaN(amount) || amount < 1) {
+      Alert.alert('Invalid Amount', 'Minimum withdrawal is $1.00');
+      return;
+    }
+    Alert.alert(
+      'Confirm Revenue Withdrawal',
+      `Send $${amount.toFixed(2)} to\n${wallet.slice(0, 8)}...${wallet.slice(-6)}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Withdraw',
+          style: 'destructive',
+          onPress: async () => {
+            setWithdrawing(true);
+            const { data, error } = await adminApi.withdrawRevenue(activeSecret, wallet, amount);
+            setWithdrawing(false);
+            if (error) { Alert.alert('Failed', error); return; }
+            if (data) {
+              setRevenueAmount('');
+              Alert.alert(
+                'Success!',
+                `$${data.amountUsd.toFixed(2)} sent.\nTx: ${data.txHash.slice(0, 12)}...`,
+                [
+                  { text: 'OK' },
+                  { text: 'View on Polygonscan', onPress: () => Linking.openURL(data.polygonscanUrl) },
+                ],
+              );
+              await load(activeSecret, page, search);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleRowPress = (user: AdminUser) => {
@@ -168,18 +213,57 @@ export function AdminDashboardScreen() {
             <>
               {/* Stats cards */}
               {stats && (
-                <View style={styles.statsGrid}>
-                  <StatCard label="Total Users"    value={stats.platform.totalUsers.toLocaleString()} color="#FFD700" />
-                  <StatCard label="Total Spins"    value={stats.platform.totalSpins.toLocaleString()} color="#00D4FF" />
-                  <StatCard label="Total Deposits" value={`$${stats.platform.totalDepositsUsd.toFixed(2)}`}    color="#2ECC71" />
-                  <StatCard label="Withdrawals"    value={`$${stats.platform.totalWithdrawalsUsd.toFixed(2)}`} color="#E74C3C" />
-                  {stats.blockchain.hotWallet && (
-                    <StatCard label="Hot Wallet" value={`$${stats.blockchain.hotWallet.balanceUsd.toFixed(2)}`} color="#9B59B6" />
-                  )}
-                  {stats.blockchain.prizePool && (
-                    <StatCard label="Prize Pool" value={`$${stats.blockchain.prizePool.balanceUsd.toFixed(2)}`} color="#F39C12" />
-                  )}
-                </View>
+                <>
+                  <View style={styles.statsGrid}>
+                    <StatCard label="Total Users"    value={stats.platform.totalUsers.toLocaleString()} color="#FFD700" />
+                    <StatCard label="Total Spins"    value={stats.platform.totalSpins.toLocaleString()} color="#00D4FF" />
+                    <StatCard label="Total Deposits" value={`$${stats.platform.totalDepositsUsd.toFixed(2)}`}    color="#2ECC71" />
+                    <StatCard label="Withdrawals"    value={`$${stats.platform.totalWithdrawalsUsd.toFixed(2)}`} color="#E74C3C" />
+                    {stats.blockchain.hotWallet && (
+                      <StatCard label="Hot Wallet" value={`$${stats.blockchain.hotWallet.balanceUsd.toFixed(2)}`} color="#9B59B6" />
+                    )}
+                    {stats.blockchain.prizePool && (
+                      <StatCard label="Prize Pool" value={`$${stats.blockchain.prizePool.balanceUsd.toFixed(2)}`} color="#F39C12" />
+                    )}
+                    <StatCard label="Platform Revenue" value={`$${stats.platform.totalPlatformFeeUsd.toFixed(2)}`} color="#FF6B35" />
+                  </View>
+
+                  {/* Revenue withdrawal */}
+                  <View style={styles.revenueBox}>
+                    <Text style={styles.revenueTitle}>Withdraw Platform Revenue</Text>
+                    <Text style={styles.revenueBalance}>
+                      Total earned: ${stats.platform.totalPlatformFeeUsd.toFixed(2)}
+                    </Text>
+                    <TextInput
+                      style={styles.revenueInput}
+                      placeholder="Wallet address (0x...)"
+                      placeholderTextColor="rgba(255,255,255,0.3)"
+                      value={revenueWallet}
+                      onChangeText={setRevenueWallet}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    <View style={styles.revenueRow}>
+                      <TextInput
+                        style={[styles.revenueInput, { flex: 1, marginRight: 8, marginBottom: 0 }]}
+                        placeholder="Amount USD"
+                        placeholderTextColor="rgba(255,255,255,0.3)"
+                        value={revenueAmount}
+                        onChangeText={setRevenueAmount}
+                        keyboardType="decimal-pad"
+                      />
+                      <TouchableOpacity
+                        style={[styles.revenueBtn, withdrawing && styles.btnDisabled]}
+                        onPress={handleWithdrawRevenue}
+                        disabled={withdrawing}
+                      >
+                        {withdrawing
+                          ? <ActivityIndicator color="#0D0D1A" size="small" />
+                          : <Text style={styles.revenueBtnText}>Send</Text>}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </>
               )}
 
               {/* Search + count */}
@@ -393,4 +477,32 @@ const styles = StyleSheet.create({
   pageIndicator:   { color: 'rgba(255,255,255,0.4)', fontSize: 13 },
 
   emptyText: { color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: 32 },
+
+  // ── Revenue withdrawal ───────────────────────────────────────────────────
+  revenueBox: {
+    margin: 12,
+    marginTop: 4,
+    backgroundColor: 'rgba(255,107,53,0.08)',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,107,53,0.25)',
+  },
+  revenueTitle:   { color: '#FF6B35', fontSize: 14, fontWeight: '800', marginBottom: 4 },
+  revenueBalance: { color: 'rgba(255,255,255,0.45)', fontSize: 12, marginBottom: 12 },
+  revenueInput: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 10,
+    color: '#fff',
+    fontSize: 13,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    marginBottom: 8,
+  },
+  revenueRow:    { flexDirection: 'row', alignItems: 'center' },
+  revenueBtn:    { backgroundColor: '#FF6B35', borderRadius: 10, paddingHorizontal: 18, paddingVertical: 11, alignItems: 'center' },
+  revenueBtnText:{ color: '#0D0D1A', fontWeight: '800', fontSize: 14 },
+  btnDisabled:   { opacity: 0.4 },
 });

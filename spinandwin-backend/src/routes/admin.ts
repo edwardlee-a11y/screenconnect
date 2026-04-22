@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { supabase } from '../config/supabase';
 import { redis, Keys } from '../config/redis';
-import { getHotWalletBalance, getPrizePoolBalance } from '../services/blockchainService';
+import { getHotWalletBalance, getPrizePoolBalance, sendPayout } from '../services/blockchainService';
 import { sendSecurityAlertEmail } from '../services/emailService';
 
 // ─── Admin auth middleware ─────────────────────────────────────────────────
@@ -34,6 +34,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
         usersResult,
         spinsResult,
         transactionsResult,
+        platformFeeResult,
         hotWallet,
         prizePool,
       ] = await Promise.allSettled([
@@ -43,6 +44,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
           .from('transactions')
           .select('amount_usd, type, status')
           .eq('status', 'completed'),
+        (supabase as any).from('room_rounds').select('platform_fee_usd').eq('status', 'complete'),
         getHotWalletBalance(),
         getPrizePoolBalance(),
       ]);
@@ -59,12 +61,20 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
         }
       }
 
+      let totalPlatformFeeUsd = 0;
+      if (platformFeeResult.status === 'fulfilled' && platformFeeResult.value.data) {
+        for (const row of platformFeeResult.value.data) {
+          totalPlatformFeeUsd += row.platform_fee_usd ?? 0;
+        }
+      }
+
       return reply.send({
         platform: {
           totalUsers,
           totalSpins,
-          totalWithdrawalsUsd: parseFloat(totalWithdrawalsUsd.toFixed(2)),
-          totalDepositsUsd:    parseFloat(totalDepositsUsd.toFixed(2)),
+          totalWithdrawalsUsd:  parseFloat(totalWithdrawalsUsd.toFixed(2)),
+          totalDepositsUsd:     parseFloat(totalDepositsUsd.toFixed(2)),
+          totalPlatformFeeUsd:  parseFloat(totalPlatformFeeUsd.toFixed(2)),
         },
         blockchain: {
           hotWallet: hotWallet.status === 'fulfilled' ? hotWallet.value : null,
@@ -350,6 +360,67 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
     async (_req, reply) => {
       await redis.del(Keys.leaderboardDaily());
       return reply.send({ message: 'Daily leaderboard reset.' });
+    },
+  );
+
+  // ── POST /api/v1/admin/withdraw-revenue ───────────────────────────────────
+  // Withdraw platform revenue (from hot wallet) to a specified wallet address.
+
+  fastify.post<{ Body: { walletAddress: string; amountUsd: number } }>(
+    '/withdraw-revenue',
+    {
+      preHandler: [adminAuth],
+      schema: {
+        body: {
+          type: 'object',
+          required: ['walletAddress', 'amountUsd'],
+          properties: {
+            walletAddress: { type: 'string' },
+            amountUsd:     { type: 'number', minimum: 1 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { walletAddress, amountUsd } = req.body;
+
+      if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+        return reply.status(400).send({
+          statusCode: 400,
+          error: 'Bad Request',
+          message: 'Invalid wallet address format.',
+        });
+      }
+
+      let txHash: string;
+      try {
+        const result = await sendPayout(walletAddress, amountUsd);
+        txHash = result.txHash;
+      } catch (err: unknown) {
+        fastify.log.error({ err }, 'Admin revenue withdrawal failed');
+        return reply.status(502).send({
+          statusCode: 502,
+          error: 'Bad Gateway',
+          message: 'Blockchain transaction failed. Check hot wallet balance.',
+        });
+      }
+
+      // Record as an admin transaction
+      await supabase.from('transactions').insert({
+        user_id:    null,
+        type:       'withdrawal',
+        amount_usd: amountUsd,
+        status:     'completed',
+        tx_hash:    txHash,
+        metadata:   { admin_revenue_withdrawal: true, walletAddress },
+      });
+
+      return reply.send({
+        txHash,
+        amountUsd,
+        walletAddress,
+        polygonscanUrl: `https://${process.env.NODE_ENV === 'production' ? '' : 'amoy.'}polygonscan.com/tx/${txHash}`,
+      });
     },
   );
 }
