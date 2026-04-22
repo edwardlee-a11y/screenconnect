@@ -13,6 +13,7 @@ import {
   generateDepositAddress,
   getAddressBalanceWei,
   weiToUsdDeposit,
+  sweepDepositToHotWallet,
 } from '../services/blockchainService';
 import { sendWithdrawalConfirmationEmail } from '../services/emailService';
 
@@ -449,7 +450,7 @@ export async function walletRoutes(fastify: FastifyInstance): Promise<void> {
 
       const { data: user } = await (supabase as any)
         .from('users')
-        .select('deposit_address, deposit_tracked_wei, balance_usd')
+        .select('deposit_address, deposit_tracked_wei, balance_usd, deposit_index')
         .eq('id', uid)
         .single();
 
@@ -471,7 +472,7 @@ export async function walletRoutes(fastify: FastifyInstance): Promise<void> {
       const newWei = currentWei - trackedWei;
       const creditedUsd = await weiToUsdDeposit(newWei);
 
-      // Credit balance + update tracked amount
+      // Credit balance — set tracked to currentWei to prevent double-credit during sweep
       const newBalance = parseFloat((user.balance_usd + creditedUsd).toFixed(2));
 
       await (supabase as any)
@@ -493,6 +494,24 @@ export async function walletRoutes(fastify: FastifyInstance): Promise<void> {
           depositAddress: user.deposit_address,
         },
       });
+
+      // Sweep deposited MATIC into hot wallet (fire-and-forget).
+      // On success: reset deposit_tracked_wei to 0 so future deposits are detected.
+      // On failure: MATIC stays at deposit address — player credit is already safe.
+      if (user.deposit_index !== null && user.deposit_index !== undefined) {
+        sweepDepositToHotWallet(user.deposit_index)
+          .then(async (result) => {
+            if (result) {
+              await (supabase as any)
+                .from('users')
+                .update({ deposit_tracked_wei: '0' })
+                .eq('id', uid);
+            }
+          })
+          .catch((err) => {
+            fastify.log.warn({ err, uid }, 'Deposit sweep to hot wallet failed — MATIC stays at deposit address');
+          });
+      }
 
       return reply.send({
         credited: creditedUsd,

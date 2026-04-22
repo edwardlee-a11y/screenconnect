@@ -330,3 +330,49 @@ export async function weiToUsdDeposit(wei: bigint): Promise<number> {
   const matic = parseFloat(ethers.formatEther(wei));
   return parseFloat((matic * rate).toFixed(2));
 }
+
+/**
+ * Sweep all MATIC from a user's deposit address into the hot wallet.
+ * Called automatically after a deposit is detected and credited.
+ * Returns null if the balance is too small to cover gas (dust).
+ */
+export async function sweepDepositToHotWallet(
+  index: number,
+): Promise<{ txHash: string; sweptWei: bigint } | null> {
+  const mnemonic = process.env.DEPOSIT_WALLET_MNEMONIC;
+  if (!mnemonic) throw new Error('[blockchain] DEPOSIT_WALLET_MNEMONIC not set');
+
+  const provider = getProvider();
+  const hdNode = ethers.HDNodeWallet.fromPhrase(mnemonic);
+  const child = hdNode.derivePath(`m/44'/60'/0'/0/${index}`);
+  const depositWallet = child.connect(provider);
+
+  const hotWalletAddress = getWallet().address;
+  const [balance, feeData] = await Promise.all([
+    provider.getBalance(depositWallet.address),
+    provider.getFeeData(),
+  ]);
+
+  const gasPrice = feeData.maxFeePerGas ?? feeData.gasPrice ?? ethers.parseUnits('30', 'gwei');
+  const gasLimit = 21000n;
+  const gasCost = gasPrice * gasLimit;
+
+  if (balance <= gasCost) return null; // Dust — not worth sweeping
+
+  const sendAmount = balance - gasCost;
+
+  const tx = await depositWallet.sendTransaction({
+    to: hotWalletAddress,
+    value: sendAmount,
+    gasLimit,
+    maxFeePerGas: feeData.maxFeePerGas ?? undefined,
+  });
+
+  const receipt = await tx.wait(1);
+  if (!receipt || receipt.status === 0) {
+    throw new Error(`[blockchain] Sweep transaction reverted: ${tx.hash}`);
+  }
+
+  console.log(`[blockchain] Swept ${ethers.formatEther(sendAmount)} MATIC from deposit[${index}] → hot wallet (${tx.hash})`);
+  return { txHash: receipt.hash, sweptWei: sendAmount };
+}

@@ -452,8 +452,8 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
         });
       }
 
-      // Record as an admin transaction
-      await supabase.from('transactions').insert({
+      // Record as an admin transaction (user_id null = platform-level tx)
+      await (supabase as any).from('transactions').insert({
         user_id:    null,
         type:       'withdrawal',
         amount_usd: amountUsd,
