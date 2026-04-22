@@ -394,7 +394,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 
       let txHash: string;
       try {
-        const result = await sendPayout(walletAddress, amountUsd);
+        const result = await sendPayout(walletAddress, amountUsd, true);
         txHash = result.txHash;
       } catch (err: unknown) {
         fastify.log.error({ err }, 'Admin revenue withdrawal failed');

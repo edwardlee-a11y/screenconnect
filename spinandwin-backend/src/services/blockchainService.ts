@@ -220,12 +220,13 @@ export async function submitSpinOnChain(params: {
 export async function sendPayout(
   toAddress: string,
   amountUsd: number,
+  skipLimit = false,
 ): Promise<{ txHash: string; amountWei: bigint }> {
   const wallet = getWallet();
   const amountWei = await usdToWei(amountUsd);
 
   // Safety check — don't send more than $500 in one tx without manual review
-  if (amountUsd > 500) {
+  if (!skipLimit && amountUsd > 500) {
     throw new Error(`[blockchain] Payout of $${amountUsd} exceeds auto-limit of $500. Manual review required.`);
   }
 
