@@ -109,7 +109,11 @@ export function TrySpinScreen() {
       const result = pendingResultRef.current;
       if (!result) return;
 
-      const netChange = result.playerPayout - result.wager;
+      // Head-to-head: winner takes opponent's wager, loser loses their wager, tie = no change
+      const playerWon = result.playerPayout > result.botPayout;
+      const tie       = result.playerPayout === result.botPayout;
+      const netChange = playerWon ? result.wager : tie ? 0 : -result.wager;
+
       setVirtualBalance(prev => {
         const next = prev + netChange;
         return next < WAGER_PRESETS[0] ? STARTING_BALANCE : Math.round(next * 100) / 100;
@@ -119,7 +123,7 @@ export function TrySpinScreen() {
 
       if (LOCAL_WHEEL[result.playerIdx].label === 'JACKPOT') {
         Haptics.jackpot(); Sounds.jackpot();
-      } else if (result.playerPayout > result.wager) {
+      } else if (playerWon) {
         Haptics.win(); Sounds.win();
       } else {
         Haptics.lose(); Sounds.lose();
@@ -253,8 +257,7 @@ function TrySpinResultModal({ visible, result, onClose }: TrySpinResultModalProp
   const botSeg       = LOCAL_WHEEL[result.botIdx];
   const playerWon    = result.playerPayout > result.botPayout;
   const tie          = result.playerPayout === result.botPayout;
-  const netChange    = result.playerPayout - result.wager;
-  const isPlayerWin  = playerSeg.multiplier > 0;
+  const netChange    = playerWon ? result.wager : tie ? 0 : -result.wager;
 
   const headline = tie       ? "🤝 It's a Tie!"
                  : playerWon ? '🏆 You Beat the Bot!'
