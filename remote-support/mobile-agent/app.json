@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "RemoteSupport Agent",
+    "slug": "remote-support-agent",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "backgroundColor": "#0d0f12"
+    },
+    "android": {
+      "package": "com.remotesupport.agent",
+      "permissions": [
+        "INTERNET",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PROJECTION",
+        "RECORD_AUDIO",
+        "CAMERA"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "com.remotesupport.agent",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Used to share your screen during a support session",
+        "NSMicrophoneUsageDescription": "Microphone is not used during support sessions"
+      }
+    },
+    "plugins": [
+      [
+        "react-native-webrtc",
+        {
+          "cameraPermission": "Used for screen sharing during support sessions",
+          "microphonePermission": "Not required — microphone is disabled"
+        }
+      ]
+    ]
+  }
+}
