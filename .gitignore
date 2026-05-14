@@ -4,22 +4,5 @@ node_modules/
 .DS_Store
 *.log
 dist/
-.expo/
-web-build/
 build/
-*.orig.*
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-
-# Junk files at repo root
-11.zip
-Backup/
-Final code/
-Final code.zip
-New folder/
-blog/
-images/
-keystone_content.txt
+release/
