@@ -25,14 +25,12 @@
         "NSMicrophoneUsageDescription": "Microphone is not used during support sessions"
       }
     },
-    "plugins": [
-      [
-        "react-native-webrtc",
-        {
-          "cameraPermission": "Used for screen sharing during support sessions",
-          "microphonePermission": "Not required — microphone is disabled"
-        }
-      ]
-    ]
+    "plugins": [],
+    "extra": {
+      "eas": {
+        "projectId": "d63152c1-bacf-4b5a-8eaf-686cf8e13bd5"
+      }
+    },
+    "owner": "2026connect"
   }
 }

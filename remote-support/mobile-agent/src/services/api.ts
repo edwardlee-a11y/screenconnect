@@ -5,7 +5,7 @@ let SERVER_URL = __DEV__
   ? Platform.OS === 'android'
     ? 'http://10.0.2.2:4000'  // Android emulator → host machine
     : 'http://localhost:4000'
-  : 'https://your-server.com';
+  : 'https://screenconnect-production.up.railway.app';
 
 export function setServerUrl(url: string): void {
   SERVER_URL = url.replace(/\/$/, '');

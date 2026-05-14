@@ -8,7 +8,7 @@ interface Config {
 }
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
-const DEFAULT_SERVER = 'http://localhost:4000';
+const DEFAULT_SERVER = 'https://screenconnect-production.up.railway.app';
 
 function loadConfig(): Config {
   try {
