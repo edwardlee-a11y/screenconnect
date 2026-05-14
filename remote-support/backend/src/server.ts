@@ -4,7 +4,6 @@ import fastifyCors from '@fastify/cors';
 import fastifyHelmet from '@fastify/helmet';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyJwt from '@fastify/jwt';
-import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 
 import { config } from './config';
@@ -43,10 +42,8 @@ async function main(): Promise<void> {
     timestamp: new Date().toISOString(),
   }));
 
-  // ── Attach Socket.IO to the raw HTTP server ────────────────────────────────
-  const httpServer = createServer(app.server);
-
-  const io = new SocketServer(httpServer, {
+  // ── Attach Socket.IO directly to Fastify's HTTP server ───────────────────
+  const io = new SocketServer(app.server, {
     cors: {
       origin: config.frontendUrl.split(',').map((o) => o.trim()),
       methods: ['GET', 'POST'],
@@ -58,10 +55,9 @@ async function main(): Promise<void> {
   registerSignaling(io);
 
   // ── Start ──────────────────────────────────────────────────────────────────
-  await app.ready();
+  await app.listen({ port: config.port, host: '0.0.0.0' });
 
-  httpServer.listen(config.port, '0.0.0.0', () => {
-    console.log(`
+  console.log(`
 ====================================
  Remote Support Backend
 ====================================
@@ -70,8 +66,7 @@ async function main(): Promise<void> {
  HTTP : http://localhost:${config.port}
  WS   : ws://localhost:${config.port}
 ====================================
-    `);
-  });
+  `);
 }
 
 main().catch((err) => {

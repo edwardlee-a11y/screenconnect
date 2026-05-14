@@ -7,21 +7,17 @@
     "dev": "tsc -p tsconfig.main.json --watch & electron .",
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "tsc -p tsconfig.renderer.json",
-    "build": "npm run build:main && npm run build:renderer",
-    "rebuild-native": "electron-rebuild -f -w robotjs",
-    "postinstall": "electron-rebuild -f -w robotjs",
+    "build": "npm run build:main && npm run build:renderer && node -e \"require('fs').copyFileSync('src/renderer/index.html','dist/renderer/index.html')\"",
     "dist": "npm run build && electron-builder",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit"
   },
   "dependencies": {
-    "robotjs": "^0.7.1",
     "socket.io-client": "^4.7.5"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
     "electron": "^31.0.1",
     "electron-builder": "^24.13.3",
-    "electron-rebuild": "^3.2.9",
     "typescript": "^5.4.5"
   },
   "build": {

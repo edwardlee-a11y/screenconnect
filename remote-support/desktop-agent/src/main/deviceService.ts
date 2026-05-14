@@ -10,7 +10,7 @@ export interface DeviceInfo {
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${config.serverUrl}${path}`, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: { ...(options?.body ? { 'Content-Type': 'application/json' } : {}), ...options?.headers },
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { error?: string };
