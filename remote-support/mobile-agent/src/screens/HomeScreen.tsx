@@ -55,7 +55,9 @@ export default function HomeScreen() {
 
   const { deviceId, sessionCode, status, errorMsg, setDevice, setStatus } = useDeviceStore();
   const [serverUrl, setServerUrlLocal] = useState(
-    Platform.OS === 'android' ? 'http://10.0.2.2:4000' : 'http://localhost:4000',
+    __DEV__
+      ? (Platform.OS === 'android' ? 'http://10.0.2.2:4000' : 'http://localhost:4000')
+      : 'https://screenconnect-production.up.railway.app',
   );
   const [showSettings, setShowSettings] = useState(false);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
