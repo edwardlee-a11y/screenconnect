@@ -55,6 +55,7 @@ async function main(): Promise<void> {
       credentials: true,
     },
     transports: ['websocket', 'polling'],
+    maxHttpBufferSize: 16 * 1024 * 1024, // 16 MB to accommodate 12 MB files + base64 overhead
   });
 
   registerSignaling(io);

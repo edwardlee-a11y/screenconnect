@@ -158,7 +158,7 @@ export default function ViewerPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { addSys('File too large (max 2 MB)'); return; }
+    if (file.size > 12 * 1024 * 1024) { addSys('File too large (max 12 MB)'); return; }
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result as string;

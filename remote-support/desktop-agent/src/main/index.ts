@@ -169,7 +169,7 @@ function setupIpc(): void {
     if (canceled || !filePaths[0]) return null;
     const filePath = filePaths[0];
     const buf = fs.readFileSync(filePath);
-    if (buf.length > 2 * 1024 * 1024) return { error: 'File too large (max 2 MB)' };
+    if (buf.length > 12 * 1024 * 1024) return { error: 'File too large (max 12 MB)' };
     const name = nodePath.basename(filePath);
     const ext = nodePath.extname(name).toLowerCase().slice(1);
     const mime: Record<string, string> = {
