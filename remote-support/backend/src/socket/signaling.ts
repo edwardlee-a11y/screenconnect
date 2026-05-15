@@ -36,7 +36,7 @@ export function registerSignaling(io: SocketServer): void {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-      ...(config.turn.url
+      ...(config.turn.url?.startsWith('turn:') || config.turn.url?.startsWith('turns:')
         ? [{ urls: config.turn.url, username: config.turn.username, credential: config.turn.credential }]
         : []),
     ],
