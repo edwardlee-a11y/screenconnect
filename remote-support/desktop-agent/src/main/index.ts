@@ -1,4 +1,6 @@
-import { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage } from 'electron';
+import { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, dialog } from 'electron';
+import * as fs from 'fs';
+import * as nodePath from 'path';
 import * as path from 'path';
 import { registerDevice, sendHeartbeat, deregisterDevice } from './deviceService';
 import {
@@ -11,6 +13,8 @@ import {
   notifyResolution,
 } from './signalingService';
 import { config, saveConfig } from './config';
+
+interface Attachment { name: string; type: string; data: string; }
 import type { RTCIceCandidateInit } from './webrtcTypes';
 
 let win: BrowserWindow | null = null;
@@ -63,6 +67,10 @@ function createWindow(): void {
     e.preventDefault();
     win?.hide();
   });
+
+  win.on('minimize', () => {
+    win?.hide();
+  });
 }
 
 // ── System tray ───────────────────────────────────────────────────────────────
@@ -79,6 +87,7 @@ function setupTray(): void {
   ]);
 
   tray.setContextMenu(contextMenu);
+  tray.on('click', () => win?.show());
   tray.on('double-click', () => win?.show());
 }
 
@@ -125,8 +134,8 @@ function setupIpc(): void {
   });
 
   // Chat message typed by device user
-  ipcMain.on('chat:send', (_e, { message }: { message: string }) => {
-    if (sessionCode) sendChat(sessionCode, message);
+  ipcMain.on('chat:send', (_e, { message, attachment }: { message: string; attachment?: Attachment }) => {
+    if (sessionCode) sendChat(sessionCode, message, attachment);
   });
 
   // End session button
@@ -146,7 +155,33 @@ function setupIpc(): void {
     return { width, height };
   });
 
+  // File picker
+  ipcMain.handle('file:open', async () => {
+    if (!win) return null;
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      properties: ['openFile'],
+      filters: [
+        { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'] },
+        { name: 'Documents', extensions: ['pdf', 'doc', 'docx', 'txt'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    if (canceled || !filePaths[0]) return null;
+    const filePath = filePaths[0];
+    const buf = fs.readFileSync(filePath);
+    if (buf.length > 2 * 1024 * 1024) return { error: 'File too large (max 2 MB)' };
+    const name = nodePath.basename(filePath);
+    const ext = nodePath.extname(name).toLowerCase().slice(1);
+    const mime: Record<string, string> = {
+      jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+      gif: 'image/gif', webp: 'image/webp', pdf: 'application/pdf',
+      txt: 'text/plain', doc: 'application/msword',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    };
+    return { name, type: mime[ext] ?? 'application/octet-stream', data: buf.toString('base64') };
+  });
+
   // Window controls
-  ipcMain.on('window:minimize', () => win?.minimize());
+  ipcMain.on('window:minimize', () => win?.hide());
   ipcMain.on('window:hide',     () => win?.hide());
 }

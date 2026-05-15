@@ -25,12 +25,7 @@
     "productName": "RemoteSupport Agent",
     "directories": { "output": "release" },
     "win": {
-      "target": "nsis",
-      "icon": "assets/icon.ico"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "target": "portable"
     },
     "files": ["dist/**/*", "assets/**/*"]
   }

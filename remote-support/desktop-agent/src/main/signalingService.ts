@@ -59,9 +59,9 @@ export function startSignaling(
     handleInput(data, win);
   });
 
-  socket.on('chat:message', (data: { message: string; role: string; timestamp: string }) => {
+  socket.on('chat:message', (data: { message: string; role: string; timestamp: string; attachment?: { name: string; type: string; data: string } }) => {
     if (data.role === 'agent') {
-      sendToRenderer(win, { type: 'CHAT_MESSAGE', message: data.message, timestamp: data.timestamp });
+      sendToRenderer(win, { type: 'CHAT_MESSAGE', message: data.message, timestamp: data.timestamp, attachment: data.attachment });
     }
   });
 
@@ -95,8 +95,8 @@ export function notifyResolution(w: number, h: number): void {
   setScreenResolution(w, h);
 }
 
-export function sendChat(sessionCode: string, message: string): void {
-  socket?.emit('chat:message', { sessionCode, message, role: 'device' });
+export function sendChat(sessionCode: string, message: string, attachment?: { name: string; type: string; data: string }): void {
+  socket?.emit('chat:message', { sessionCode, message, role: 'device', attachment });
 }
 
 export function endSession(sessionCode: string, sessionId?: string): void {

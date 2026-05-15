@@ -125,12 +125,18 @@ export function registerSignaling(io: SocketServer): void {
     });
 
     // ── Chat relay ──────────────────────────────────────────────────────────
-    socket.on('chat:message', (data: { sessionCode: string; message: string; role: 'device' | 'agent' }) => {
-      io.to(`session:${data.sessionCode}`).emit('chat:message', {
-        message: data.message,
-        role: data.role,
-        timestamp: new Date().toISOString(),
-      });
+    socket.on('chat:message', (data: { sessionCode: string; message: string; role: 'device' | 'agent'; attachment?: { name: string; type: string; data: string } }) => {
+      const peer = codeToPeer.get(data.sessionCode);
+      if (!peer) return;
+      const targetSocketId = data.role === 'device' ? peer.agentSocketId : peer.deviceSocketId;
+      if (targetSocketId) {
+        io.to(targetSocketId).emit('chat:message', {
+          message: data.message,
+          role: data.role,
+          timestamp: new Date().toISOString(),
+          attachment: data.attachment,
+        });
+      }
     });
 
     // ── Session end ─────────────────────────────────────────────────────────

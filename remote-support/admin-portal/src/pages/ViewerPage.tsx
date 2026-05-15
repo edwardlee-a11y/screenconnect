@@ -5,10 +5,13 @@ import { useAuthStore } from '../store/authStore';
 
 type ConnState = 'idle' | 'connecting' | 'waiting' | 'negotiating' | 'streaming' | 'ended' | 'error';
 
+interface Attachment { name: string; type: string; data: string; }
+
 interface ChatMsg {
   role: 'agent' | 'device' | 'sys';
   text: string;
   ts: string;
+  attachment?: Attachment;
 }
 
 export default function ViewerPage() {
@@ -21,6 +24,8 @@ export default function ViewerPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [msg, setMsg] = useState('');
+  const [pendingFile, setPendingFile] = useState<Attachment | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -95,9 +100,9 @@ export default function ViewerPage() {
       try { await pcRef.current?.addIceCandidate(data.candidate); } catch { /* ignore */ }
     });
 
-    socket.on('chat:message', (data: { message: string; role: string; timestamp: string }) => {
+    socket.on('chat:message', (data: { message: string; role: string; timestamp: string; attachment?: Attachment }) => {
       if (data.role === 'device') {
-        setChat((c) => [...c, { role: 'device', text: data.message, ts: new Date(data.timestamp).toLocaleTimeString() }]);
+        setChat((c) => [...c, { role: 'device', text: data.message, ts: new Date(data.timestamp).toLocaleTimeString(), attachment: data.attachment }]);
       }
     });
 
@@ -149,13 +154,32 @@ export default function ViewerPage() {
     addSys('Session ended');
   };
 
+  // ── File pick ──────────────────────────────────────────────────────────────
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { addSys('File too large (max 2 MB)'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.split(',')[1];
+      setPendingFile({ name: file.name, type: file.type, data: base64 });
+      addSys(`📎 ${file.name} ready — click send`);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
   // ── Send chat ──────────────────────────────────────────────────────────────
   const sendChat = () => {
     const text = msg.trim();
-    if (!text || !socketRef.current) return;
-    socketRef.current.emit('chat:message', { sessionCode: sessionCodeRef.current, message: text, role: 'agent' });
-    setChat((c) => [...c, { role: 'agent', text, ts: new Date().toLocaleTimeString() }]);
+    if (!text && !pendingFile) return;
+    if (!socketRef.current) return;
+    const attachment = pendingFile ?? undefined;
+    socketRef.current.emit('chat:message', { sessionCode: sessionCodeRef.current, message: text, role: 'agent', attachment });
+    setChat((c) => [...c, { role: 'agent', text, ts: new Date().toLocaleTimeString(), attachment }]);
     setMsg('');
+    setPendingFile(null);
   };
 
   useEffect(() => {
@@ -319,7 +343,20 @@ export default function ViewerPage() {
                         borderRadius: 8, padding: '8px 10px',
                         fontSize: 12, color: m.role === 'agent' ? '#c0f0d8' : 'var(--text)',
                       }}>
-                        {m.text}
+                        {m.text && <div>{m.text}</div>}
+                        {m.attachment && (
+                          m.attachment.type.startsWith('image/') ? (
+                            <img src={`data:${m.attachment.type};base64,${m.attachment.data}`}
+                              alt={m.attachment.name}
+                              style={{ maxWidth: '100%', maxHeight: 160, borderRadius: 4, marginTop: m.text ? 6 : 0, display: 'block' }} />
+                          ) : (
+                            <a href={`data:${m.attachment.type};base64,${m.attachment.data}`}
+                              download={m.attachment.name}
+                              style={{ fontSize: 11, color: 'var(--accent)', display: 'block', marginTop: m.text ? 4 : 0 }}>
+                              📄 {m.attachment.name}
+                            </a>
+                          )
+                        )}
                       </div>
                       <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2, fontFamily: 'var(--mono)', textAlign: m.role === 'agent' ? 'right' : 'left' }}>
                         {m.ts}
@@ -330,10 +367,15 @@ export default function ViewerPage() {
               ))}
             </div>
 
-            <div style={{ padding: 10, borderTop: '1px solid var(--border)', display: 'flex', gap: 8 }}>
+            <div style={{ padding: 10, borderTop: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx,.txt" style={{ display: 'none' }} onChange={handleFileChange} />
+              <button title="Attach file" onClick={() => fileInputRef.current?.click()}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: pendingFile ? 'var(--accent)' : 'var(--muted2)', padding: '0 2px' }}>
+                📎
+              </button>
               <input
                 className="input"
-                style={{ fontSize: 12 }}
+                style={{ fontSize: 12, flex: 1 }}
                 placeholder="Type a message…"
                 value={msg}
                 onChange={(e) => setMsg(e.target.value)}

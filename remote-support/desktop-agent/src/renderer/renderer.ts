@@ -15,6 +15,7 @@ const sharingBadge   = document.getElementById('sharingBadge')!;
 const btnStop        = document.getElementById('btnStop')!;
 const chatMsgs       = document.getElementById('chatMsgs')!;
 const chatInput      = document.getElementById('chatInput') as HTMLInputElement;
+const chatAttach     = document.getElementById('chatAttach')!;
 const chatSend       = document.getElementById('chatSend')!;
 const serverUrlInput = document.getElementById('serverUrlInput') as HTMLInputElement;
 const settingsPanel  = document.getElementById('settingsPanel')!;
@@ -29,6 +30,8 @@ function setStatus(status: 'offline' | 'online' | 'session' | 'error', label: st
   statusText.textContent = label;
 }
 
+let pendingAttachment: { name: string; type: string; data: string } | null = null;
+
 function addSys(text: string): void {
   const el = document.createElement('div');
   el.className = 'msg-bubble msg-sys';
@@ -37,10 +40,29 @@ function addSys(text: string): void {
   chatMsgs.scrollTop = chatMsgs.scrollHeight;
 }
 
-function addMsg(role: 'agent' | 'device', text: string): void {
+function addMsg(role: 'agent' | 'device', text: string, attachment?: { name: string; type: string; data: string }): void {
   const el = document.createElement('div');
   el.className = `msg-bubble msg-${role}`;
-  el.textContent = text;
+  if (text) {
+    const p = document.createElement('span');
+    p.textContent = text;
+    el.appendChild(p);
+  }
+  if (attachment) {
+    if (attachment.type.startsWith('image/')) {
+      const img = document.createElement('img');
+      img.src = `data:${attachment.type};base64,${attachment.data}`;
+      img.className = 'chat-img';
+      el.appendChild(img);
+    } else {
+      const a = document.createElement('a');
+      a.href = `data:${attachment.type};base64,${attachment.data}`;
+      a.download = attachment.name;
+      a.textContent = `📄 ${attachment.name}`;
+      a.className = 'chat-file';
+      el.appendChild(a);
+    }
+  }
   chatMsgs.appendChild(el);
   chatMsgs.scrollTop = chatMsgs.scrollHeight;
 }
@@ -96,7 +118,7 @@ window.agent.onSignaling(async (event) => {
       break;
 
     case 'CHAT_MESSAGE':
-      addMsg('agent', event.message);
+      addMsg('agent', event.message, event.attachment);
       break;
   }
 });
@@ -157,12 +179,22 @@ function stopScreenShare(): void {
 }
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
+chatAttach.addEventListener('click', async () => {
+  const result = await window.agent.openFile();
+  if (!result) return;
+  if ('error' in result) { addSys(result.error); return; }
+  pendingAttachment = result;
+  addSys(`📎 ${result.name} ready — click send`);
+});
+
 function sendChat(): void {
   const text = chatInput.value.trim();
-  if (!text) return;
-  addMsg('device', text);
-  window.agent.sendChat(text);
+  if (!text && !pendingAttachment) return;
+  const attachment = pendingAttachment ?? undefined;
+  addMsg('device', text, attachment);
+  window.agent.sendChat(text, attachment);
   chatInput.value = '';
+  pendingAttachment = null;
 }
 chatSend.addEventListener('click', sendChat);
 chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });

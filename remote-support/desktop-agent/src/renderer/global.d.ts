@@ -1,12 +1,18 @@
 import type { RTCIceCandidateInit, RTCConfiguration } from '../main/webrtcTypes';
 
+export interface Attachment {
+  name: string;
+  type: string;
+  data: string; // base64
+}
+
 type SignalingEvent =
   | { type: 'STATUS';       status: string }
   | { type: 'AGENT_JOINED'; sessionId: string; controlType: string; iceConfig: RTCConfiguration }
   | { type: 'SIGNAL_ANSWER'; sdp: string }
   | { type: 'SIGNAL_ICE';   candidate: RTCIceCandidateInit }
   | { type: 'SESSION_ENDED' }
-  | { type: 'CHAT_MESSAGE'; message: string; timestamp: string };
+  | { type: 'CHAT_MESSAGE'; message: string; timestamp: string; attachment?: Attachment };
 
 declare global {
   interface Window {
@@ -17,7 +23,8 @@ declare global {
       sendOffer:        (sdp: string) => void;
       sendIce:          (candidate: RTCIceCandidateInit) => void;
       reportResolution: (w: number, h: number) => void;
-      sendChat:         (message: string) => void;
+      sendChat:         (message: string, attachment?: Attachment) => void;
+      openFile:         () => Promise<Attachment | { error: string } | null>;
       endSession:       (sessionId?: string) => void;
       saveSettings:     (serverUrl: string) => void;
       getPrimaryScreen: () => Promise<{ width: number; height: number }>;

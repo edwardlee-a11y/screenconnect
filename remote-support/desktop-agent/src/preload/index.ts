@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { RTCIceCandidateInit } from '../main/webrtcTypes';
 
+interface Attachment { name: string; type: string; data: string; }
+
 contextBridge.exposeInMainWorld('agent', {
   // ── Main → Renderer events ───────────────────────────────────────────────
   onDeviceReady: (cb: (data: { deviceId: string; sessionCode: string; serverUrl: string }) => void) =>
@@ -22,8 +24,11 @@ contextBridge.exposeInMainWorld('agent', {
   reportResolution: (width: number, height: number) =>
     ipcRenderer.send('screen:resolution', { width, height }),
 
-  sendChat:       (message: string) =>
-    ipcRenderer.send('chat:send', { message }),
+  sendChat: (message: string, attachment?: Attachment) =>
+    ipcRenderer.send('chat:send', { message, attachment }),
+
+  openFile: () =>
+    ipcRenderer.invoke('file:open') as Promise<Attachment | { error: string } | null>,
 
   endSession:     (sessionId?: string) =>
     ipcRenderer.send('session:end', { sessionId }),
