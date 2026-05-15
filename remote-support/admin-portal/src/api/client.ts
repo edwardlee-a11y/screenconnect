@@ -1,4 +1,6 @@
-const BASE = (import.meta.env.VITE_API_URL ?? '') + '/api';
+const BACKEND = import.meta.env.VITE_API_URL
+  ?? (import.meta.env.DEV ? '' : 'https://screenconnect-production.up.railway.app');
+const BASE = BACKEND + '/api';
 
 function getToken(): string | null {
   return localStorage.getItem('rs_token');

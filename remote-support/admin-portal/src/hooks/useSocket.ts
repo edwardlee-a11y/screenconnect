@@ -12,7 +12,9 @@ export function useSocket(): Socket | null {
     if (!token) return;
 
     if (!sharedSocket || !sharedSocket.connected) {
-      sharedSocket = io(import.meta.env.VITE_API_URL ?? '/', {
+      const backendUrl = import.meta.env.VITE_API_URL
+        ?? (import.meta.env.DEV ? '/' : 'https://screenconnect-production.up.railway.app');
+      sharedSocket = io(backendUrl, {
         auth: { token },
         transports: ['websocket'],
         autoConnect: true,
