@@ -27,6 +27,16 @@
     "win": {
       "target": "portable"
     },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] }
+      ],
+      "category": "public.app-category.utilities"
+    },
+    "dmg": {
+      "title": "RemoteSupport Agent",
+      "window": { "width": 540, "height": 380 }
+    },
     "files": ["dist/**/*", "assets/**/*"]
   }
 }

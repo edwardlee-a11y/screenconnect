@@ -25,6 +25,8 @@ let heartbeatTimer: NodeJS.Timeout | null = null;
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
+  // Hide from macOS dock — agent lives in menu bar tray only
+  if (process.platform === 'darwin') app.dock?.hide();
   createWindow();
   setupTray();
   setupIpc();
@@ -33,6 +35,11 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   // Keep running in tray — only quit via tray menu
+});
+
+// macOS: clicking dock icon re-opens the window
+app.on('activate', () => {
+  win?.show();
 });
 
 app.on('before-quit', async () => {
