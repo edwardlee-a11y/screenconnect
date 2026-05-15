@@ -10,7 +10,7 @@ type SignalingEvent =
   | { type: 'SIGNAL_ANSWER'; sdp: string }
   | { type: 'SIGNAL_ICE'; candidate: RTCIceCandidateInit }
   | { type: 'SESSION_ENDED' }
-  | { type: 'CHAT_MESSAGE'; message: string; timestamp: string };
+  | { type: 'CHAT_MESSAGE'; message: string; timestamp: string; attachment?: { name: string; type: string; data: string } };
 
 let socket: Socket | null = null;
 
