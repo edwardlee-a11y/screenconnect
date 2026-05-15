@@ -9,11 +9,18 @@ export type ConnectionStatus =
   | 'error'
   | 'offline';
 
+export interface Attachment {
+  name: string;
+  type: string;
+  data: string; // base64
+}
+
 export interface ChatMessage {
   id: string;
   role: 'agent' | 'device' | 'sys';
   text: string;
   ts: string;
+  attachment?: Attachment;
 }
 
 interface DeviceState {

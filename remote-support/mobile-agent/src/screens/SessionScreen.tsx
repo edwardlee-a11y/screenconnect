@@ -5,12 +5,16 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
+  Image,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Alert,
   ListRenderItem,
 } from 'react-native';
-import { useDeviceStore, type ChatMessage } from '../store/deviceStore';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
+import { useDeviceStore, type ChatMessage, type Attachment } from '../store/deviceStore';
 import { sendChat, endSession } from '../services/signalingService';
 
 const COLORS = {
@@ -28,14 +32,42 @@ const COLORS = {
 export default function SessionScreen() {
   const { sessionCode, sessionId, chat, addChat, clearSession } = useDeviceStore();
   const [msg, setMsg] = useState('');
+  const [pendingFile, setPendingFile] = useState<Attachment | null>(null);
   const listRef = useRef<FlatList>(null);
+
+  async function pickFile() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/*', 'application/pdf', 'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'text/plain'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      if (asset.size && asset.size > 12 * 1024 * 1024) {
+        Alert.alert('File too large', 'Maximum file size is 12 MB');
+        return;
+      }
+      const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      setPendingFile({ name: asset.name, type: asset.mimeType ?? 'application/octet-stream', data: base64 });
+      addChat({ role: 'sys', text: `📎 ${asset.name} ready — tap send`, ts: new Date().toLocaleTimeString() });
+    } catch {
+      Alert.alert('Error', 'Could not read file');
+    }
+  }
 
   function send() {
     const text = msg.trim();
-    if (!text || !sessionCode) return;
-    addChat({ role: 'device', text, ts: new Date().toLocaleTimeString() });
-    sendChat(sessionCode, text);
+    if (!text && !pendingFile) return;
+    if (!sessionCode) return;
+    const attachment = pendingFile ?? undefined;
+    addChat({ role: 'device', text, ts: new Date().toLocaleTimeString(), attachment });
+    sendChat(sessionCode, text, attachment);
     setMsg('');
+    setPendingFile(null);
   }
 
   function stopSharing() {
@@ -56,7 +88,18 @@ export default function SessionScreen() {
     return (
       <View style={[styles.msgRow, isMe ? styles.msgRight : styles.msgLeft]}>
         <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
-          <Text style={[styles.bubbleText, isMe && { color: '#c0f0d8' }]}>{item.text}</Text>
+          {!!item.text && <Text style={[styles.bubbleText, isMe && { color: '#c0f0d8' }]}>{item.text}</Text>}
+          {item.attachment && (
+            item.attachment.type.startsWith('image/') ? (
+              <Image
+                source={{ uri: `data:${item.attachment.type};base64,${item.attachment.data}` }}
+                style={styles.attachImg}
+                resizeMode="contain"
+              />
+            ) : (
+              <Text style={styles.attachDoc}>📄 {item.attachment.name}</Text>
+            )
+          )}
         </View>
         <Text style={styles.msgTime}>{item.ts}</Text>
       </View>
@@ -107,6 +150,9 @@ export default function SessionScreen() {
 
       {/* Input bar */}
       <View style={styles.inputBar}>
+        <TouchableOpacity style={styles.attachBtn} onPress={pickFile}>
+          <Text style={[styles.attachIcon, pendingFile && { color: COLORS.accent }]}>📎</Text>
+        </TouchableOpacity>
         <TextInput
           style={styles.input}
           placeholder="Message agent…"
@@ -193,6 +239,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 9,
     color: COLORS.text, fontSize: 13,
   },
+  attachBtn:  { paddingHorizontal: 6, justifyContent: 'center' },
+  attachIcon: { fontSize: 20, color: COLORS.muted2 },
+  attachImg:  { width: 180, height: 120, borderRadius: 6, marginTop: 6 },
+  attachDoc:  { fontSize: 12, color: COLORS.accent, marginTop: 4 },
   sendBtn:  { width: 38, height: 38, backgroundColor: COLORS.accent, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   sendIcon: { color: '#000', fontSize: 16, fontWeight: '700' },
 

@@ -68,9 +68,9 @@ export function connect(deviceId: string, sessionCode: string): void {
     await addIceCandidate(data.candidate).catch(console.error);
   });
 
-  socket.on('chat:message', (data: { message: string; role: string; timestamp: string }) => {
+  socket.on('chat:message', (data: { message: string; role: string; timestamp: string; attachment?: { name: string; type: string; data: string } }) => {
     if (data.role === 'agent') {
-      store.addChat({ role: 'agent', text: data.message, ts: data.timestamp });
+      store.addChat({ role: 'agent', text: data.message, ts: data.timestamp, attachment: data.attachment });
     }
   });
 
@@ -90,8 +90,8 @@ export function connect(deviceId: string, sessionCode: string): void {
   });
 }
 
-export function sendChat(sessionCode: string, message: string): void {
-  socket?.emit('chat:message', { sessionCode, message, role: 'device' });
+export function sendChat(sessionCode: string, message: string, attachment?: { name: string; type: string; data: string }): void {
+  socket?.emit('chat:message', { sessionCode, message, role: 'device', attachment });
 }
 
 export function endSession(sessionCode: string, sessionId?: string): void {
