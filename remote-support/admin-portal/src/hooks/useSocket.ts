@@ -12,7 +12,7 @@ export function useSocket(): Socket | null {
     if (!token) return;
 
     if (!sharedSocket || !sharedSocket.connected) {
-      sharedSocket = io('/', {
+      sharedSocket = io(import.meta.env.VITE_API_URL ?? '/', {
         auth: { token },
         transports: ['websocket'],
         autoConnect: true,
