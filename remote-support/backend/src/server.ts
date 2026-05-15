@@ -21,8 +21,13 @@ async function main(): Promise<void> {
   // ── Plugins ────────────────────────────────────────────────────────────────
   await app.register(fastifyHelmet, { contentSecurityPolicy: false });
 
+  const allowedOrigins = [
+    ...config.frontendUrl.split(',').map((o) => o.trim()),
+    'https://screenconnect-vert.vercel.app',
+  ].filter(Boolean);
+
   await app.register(fastifyCors, {
-    origin: config.frontendUrl.split(',').map((o) => o.trim()),
+    origin: allowedOrigins,
     credentials: true,
   });
 
@@ -45,7 +50,7 @@ async function main(): Promise<void> {
   // ── Attach Socket.IO directly to Fastify's HTTP server ───────────────────
   const io = new SocketServer(app.server, {
     cors: {
-      origin: config.frontendUrl.split(',').map((o) => o.trim()),
+      origin: allowedOrigins,
       methods: ['GET', 'POST'],
       credentials: true,
     },
